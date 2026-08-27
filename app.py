@@ -18,7 +18,8 @@ DART_API_KEY = os.getenv("DART_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
-TEAMS_WEBHOOK_URL = os.getenv("TEAMS_WEBHOOK_URL", "")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
 OWN_COMPANIES = ["포스코퓨처엠"]
 COMPETITORS = ["포스코홀딩스", "LG화학", "에코프로비엠", "엘앤에프"]
@@ -353,18 +354,41 @@ def analyze_content_with_llm(title: str, text_value: str, group_type: str = "경
     return default_ai()
 
 
-def send_teams_alert(title: str, corp_name: str, ai_result: dict, source_url: str) -> bool:
-    if not TEAMS_WEBHOOK_URL:
+def send_telegram_alert(title: str, corp_name: str, ai_result: dict, source_url: str) -> bool:
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         return False
     try:
         r = validate_ai(ai_result)
         sentiment = r["sentiment"]
         header = {"주의": "🚨 주의", "기회": "💡 기회", "중립": "🟡 중립"}[sentiment]
-        summary = "\n".join(f"• {x}" for x in r["summary_points"])
-        content = {"type": "message", "attachments": [{"contentType": "application/vnd.microsoft.card.adaptive", "content": {"$schema": "http://adaptivecards.io/schemas/adaptive-card.json", "type": "AdaptiveCard", "version": "1.4", "body": [{"type": "TextBlock", "text": f"{header} | FUTURE:M RADAR", "weight": "Bolder", "size": "Large", "wrap": True}, {"type": "TextBlock", "text": title, "weight": "Bolder", "wrap": True}, {"type": "FactSet", "facts": [{"title": "기업명", "value": corp_name}, {"title": "우선순위", "value": r["priority"]}, {"title": "감지시각", "value": datetime.now().strftime("%Y-%m-%d %H:%M:%S")} ]}, {"type": "TextBlock", "text": "AI 3줄 요약", "weight": "Bolder"}, {"type": "TextBlock", "text": summary, "wrap": True}, {"type": "TextBlock", "text": "전략 시사점", "weight": "Bolder"}, {"type": "TextBlock", "text": r["strategic_implication"], "wrap": True}], "actions": [{"type": "Action.OpenUrl", "title": "📄 원문 바로가기", "url": source_url}] if source_url else []}}]}
-        response = requests.post(TEAMS_WEBHOOK_URL, headers={"Content-Type": "application/json"}, json=content, timeout=15)
+        summary = "\n".join(f"• {html.escape(point)}" for point in r["summary_points"])
+        source_link = (
+            f'\n\n<a href="{html.escape(source_url, quote=True)}">📄 원문 바로가기</a>'
+            if source_url
+            else ""
+        )
+        message = (
+            f"<b>{header} | FUTURE:M RADAR</b>\n\n"
+            f"<b>{html.escape(title)}</b>\n"
+            f"기업: {html.escape(corp_name)}\n"
+            f"우선순위: <b>{r['priority']}</b>\n"
+            f"감지시각: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+            f"<b>AI 핵심 요약</b>\n{summary}\n\n"
+            f"<b>전략 시사점</b>\n{html.escape(r['strategic_implication'])}"
+            f"{source_link}"
+        )
+        response = requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={
+                "chat_id": TELEGRAM_CHAT_ID,
+                "text": message[:4096],
+                "parse_mode": "HTML",
+                "link_preview_options": {"is_disabled": True},
+            },
+            timeout=15,
+        )
         response.raise_for_status()
-        return True
+        return bool(response.json().get("ok"))
     except Exception:
         return False
 
@@ -943,11 +967,11 @@ if selected_result:
             st.caption("EXECUTIVE ACTION")
             if selected_url:
                 st.link_button("📄 원문 열기", selected_url, width="stretch")
-            if st.button("🚀 Teams 발송", type="primary", width="stretch"):
-                if send_teams_alert(selected_title, selected_company, selected_result, selected_url):
+            if st.button("✈️ Telegram 발송", type="primary", width="stretch"):
+                if send_telegram_alert(selected_title, selected_company, selected_result, selected_url):
                     st.success("발송 완료")
                 else:
-                    st.error("웹훅 설정 필요")
+                    st.error("Telegram 봇 설정 필요")
 else:
     st.markdown(
         '<div class="brief-card"><div class="brief-label">Executive briefing</div>'
