@@ -503,6 +503,117 @@ st.markdown(
     div.stButton > button, div.stLinkButton > a { min-height:2rem; padding:.25rem .55rem; font-size:.76rem; }
     div[data-testid="stAlert"] { padding:.55rem .7rem; font-size:.78rem; }
     hr { margin:.35rem 0 !important; }
+
+    /* FUTURE:M RADAR — executive design system */
+    :root {
+        --radar-navy:#07142d; --radar-blue:#2365f5; --radar-cyan:#29c7c9;
+        --radar-ink:#12203a; --radar-muted:#718096; --radar-line:#dce5f1;
+        --radar-surface:rgba(255,255,255,.94);
+    }
+    html, body, [class*="css"] { font-family:"Pretendard","Inter","Segoe UI",sans-serif; }
+    .stApp {
+        background:
+            radial-gradient(circle at 84% 2%, rgba(35,101,245,.10), transparent 25rem),
+            radial-gradient(circle at 12% 96%, rgba(41,199,201,.08), transparent 24rem),
+            #f4f7fb;
+    }
+    .block-container { padding:.7rem 1.25rem .4rem; }
+    [data-testid="stSidebar"] {
+        background:
+            radial-gradient(circle at 15% 4%, rgba(41,199,201,.16), transparent 14rem),
+            linear-gradient(165deg,#0c1d3d 0%,#07142d 72%,#091a36 100%);
+        border-right:1px solid rgba(128,164,220,.16);
+        box-shadow:12px 0 32px rgba(7,20,45,.10);
+    }
+    [data-testid="stSidebar"] [data-testid="stSidebarContent"] { padding-top:.7rem; }
+    .side-brand { padding:.45rem .15rem .9rem; border-bottom:1px solid rgba(177,203,242,.14); margin-bottom:.8rem; }
+    .side-brand-top { display:flex; align-items:center; gap:.6rem; }
+    .side-logo {
+        width:31px; height:31px; display:grid; place-items:center; border-radius:10px;
+        color:white; font-weight:900; background:linear-gradient(145deg,#2b72ff,#29c7c9);
+        box-shadow:0 8px 22px rgba(35,101,245,.38);
+    }
+    .side-name { color:#fff; font-size:1.02rem; font-weight:850; letter-spacing:.04em; }
+    .side-sub { color:#88a1c8; font-size:.68rem; margin:5px 0 0 42px; letter-spacing:.11em; }
+    [data-testid="stSidebar"] label p,
+    [data-testid="stSidebar"] .stCaption p { color:#9eb1cf !important; font-weight:650; letter-spacing:.02em; }
+    [data-testid="stSidebar"] [data-testid="stRadio"] > div { gap:.35rem; }
+    [data-testid="stSidebar"] [data-testid="stRadio"] label {
+        padding:.42rem .5rem; border:1px solid rgba(164,190,230,.12); border-radius:9px;
+        background:rgba(255,255,255,.025); transition:.18s ease;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
+        background:rgba(50,111,243,.16); border-color:rgba(80,139,255,.38);
+    }
+    [data-testid="stSidebar"] [data-baseweb="input"] > div,
+    [data-testid="stSidebar"] [data-baseweb="select"] > div {
+        background:#f9fbff !important; border:1px solid rgba(255,255,255,.3) !important;
+        border-radius:11px !important; box-shadow:0 5px 16px rgba(0,0,0,.12);
+    }
+    [data-testid="stSidebar"] [data-baseweb="tag"] {
+        background:linear-gradient(135deg,#245de0,#2d76ff) !important;
+        border-radius:7px !important; border:1px solid rgba(255,255,255,.12) !important;
+    }
+    [data-testid="stSidebar"] [data-baseweb="tag"] * { color:#fff !important; }
+    [data-testid="stSidebar"] .stButton button {
+        min-height:2.25rem; border-radius:10px; color:#fff !important; font-weight:750;
+        background:linear-gradient(135deg,#2462e9,#3479ff); border:1px solid rgba(255,255,255,.10);
+        box-shadow:0 8px 20px rgba(35,101,245,.22); transition:.18s ease;
+    }
+    [data-testid="stSidebar"] .stButton button:hover {
+        transform:translateY(-1px); box-shadow:0 11px 25px rgba(35,101,245,.34);
+    }
+    .saims-header {
+        min-height:78px; position:relative; overflow:hidden; padding:13px 18px; margin-bottom:10px;
+        background:
+            radial-gradient(circle at 78% -40%,rgba(41,199,201,.33),transparent 17rem),
+            linear-gradient(112deg,#0a1833 0%,#123469 62%,#164a80 100%);
+        border:1px solid rgba(135,177,239,.22); border-radius:16px;
+        box-shadow:0 12px 30px rgba(12,35,75,.18);
+    }
+    .saims-header:after {
+        content:""; position:absolute; width:180px; height:180px; right:-55px; top:-92px;
+        border:1px solid rgba(255,255,255,.13); border-radius:50%; box-shadow:0 0 0 24px rgba(255,255,255,.025);
+    }
+    .header-eyebrow { color:#55dadd; font-size:.64rem; font-weight:800; letter-spacing:.18em; margin-bottom:2px; }
+    .saims-brand { color:#fff; font-size:1.34rem; font-weight:880; letter-spacing:.035em; }
+    .saims-sub { color:#9fb5d9; font-size:.7rem; letter-spacing:.055em; }
+    .header-status { display:flex; align-items:center; justify-content:flex-end; gap:.4rem; position:relative; z-index:1; }
+    .status-chip {
+        padding:5px 8px; color:#c8d8f3; font-size:.64rem; font-weight:750; letter-spacing:.03em;
+        background:rgba(255,255,255,.075); border:1px solid rgba(190,214,249,.16); border-radius:999px;
+        backdrop-filter:blur(8px);
+    }
+    .status-chip.ok { color:#91f1cc; }
+    .updated-chip { color:#9fb5d9; font-size:.66rem; margin-left:.2rem; }
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        background:var(--radar-surface); border:1px solid var(--radar-line); border-radius:14px;
+        box-shadow:0 7px 22px rgba(28,53,91,.065); backdrop-filter:blur(10px);
+    }
+    .panel-title { color:var(--radar-ink); font-size:.92rem; font-weight:820; letter-spacing:-.01em; }
+    [data-testid="stMetric"] {
+        background:linear-gradient(160deg,#fff,#f8fbff); border:1px solid var(--radar-line);
+        border-radius:13px; padding:.62rem .75rem; box-shadow:0 7px 20px rgba(26,53,94,.07);
+    }
+    [data-testid="stMetricLabel"] p { color:#738198 !important; font-weight:700; font-size:.72rem; }
+    [data-testid="stMetricValue"] { color:#142441; font-weight:820; letter-spacing:-.035em; }
+    .brief-card {
+        background:linear-gradient(155deg,#fff,#f8fbff); border:1px solid var(--radar-line);
+        border-radius:13px; box-shadow:0 7px 20px rgba(26,53,94,.065);
+    }
+    .brief-label { color:#2c6dec; letter-spacing:.11em; }
+    .brief-strategy { background:linear-gradient(100deg,#edf4ff,#eefcfb); color:#194d80; border:1px solid #d9e8f8; }
+    .dart-table-wrap { border-color:var(--radar-line); box-shadow:inset 0 1px 0 #fff; }
+    .dart-table th { background:#f1f5fb; color:#687995; font-size:.69rem; letter-spacing:.03em; }
+    .dart-table tr:hover td { background:#f5f9ff; }
+    .dart-table a { color:#2163df; }
+    div.stButton > button, div.stLinkButton > a { border-radius:9px; font-weight:700; transition:.16s ease; }
+    div.stButton > button:hover, div.stLinkButton > a:hover { transform:translateY(-1px); }
+    div[data-testid="stAlert"] { border-radius:10px; border-width:1px; }
+    ::-webkit-scrollbar { width:7px; height:7px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+    ::-webkit-scrollbar-thumb { background:#b7c5d8; border-radius:999px; }
+    ::-webkit-scrollbar-thumb:hover { background:#8fa3bf; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -521,8 +632,12 @@ for key, default in {
     if key not in st.session_state:
         st.session_state[key] = default
 
-st.sidebar.title("🔋 FUTURE:M RADAR")
-st.sidebar.caption("Battery & Materials Intelligence")
+st.sidebar.markdown(
+    '<div class="side-brand"><div class="side-brand-top"><div class="side-logo">M</div>'
+    '<div class="side-name">FUTURE:M RADAR</div></div>'
+    '<div class="side-sub">MATERIALS INTELLIGENCE</div></div>',
+    unsafe_allow_html=True,
+)
 analysis_category = st.sidebar.radio(
     "분석 카테고리",
     ["📡 산업 인텔리전스", "📊 기업 재무분석"],
@@ -533,7 +648,7 @@ company_to_add = st.sidebar.text_input(
     placeholder="예: 롯데에너지머티리얼즈",
     label_visibility="collapsed",
 )
-if st.sidebar.button("＋ 모니터링 기업 추가", use_container_width=True):
+if st.sidebar.button("＋ 모니터링 기업 추가", width="stretch"):
     validation = validate_listed_company(company_to_add, st.session_state.dart_api_key)
     if validation.get("valid"):
         canonical_name = validation["corp_name"]
@@ -584,7 +699,7 @@ elif st.session_state.monitor_signature != current_signature:
     st.session_state.updated = None
     st.rerun()
 sentiment_filter = st.sidebar.selectbox("감성 필터", ["전체", "🔴 주의", "🟢 기회", "🟡 중립"])
-if st.sidebar.button("🔄 실시간 데이터 갱신", type="primary", use_container_width=True):
+if st.sidebar.button("🔄 실시간 데이터 갱신", type="primary", width="stretch"):
     st.cache_data.clear()
     st.session_state.dart = empty_dart()
     st.session_state.news = []
@@ -632,14 +747,21 @@ for item in st.session_state.news:
         news_items.append(item)
 
 updated_text = st.session_state.updated or "미수집"
+dart_chip = "DART CONNECTED" if st.session_state.dart_api_key else "DART OFFLINE"
+gemini_chip = "GEMINI READY" if GEMINI_API_KEY else "AI OFFLINE"
 st.markdown(
     f"""
     <div class="saims-header">
       <div>
+        <div class="header-eyebrow">POSCO FUTURE M · EXECUTIVE INTELLIGENCE</div>
         <div class="saims-brand">FUTURE:M RADAR</div>
-        <div class="saims-sub">SECONDARY BATTERY · MATERIALS · DISCLOSURE · NEWS</div>
+        <div class="saims-sub">BATTERY MATERIALS · DISCLOSURE · NEWS · FINANCIAL SIGNALS</div>
       </div>
-      <div class="saims-live"><span class="live-dot">●</span> LIVE &nbsp;|&nbsp; {updated_text}</div>
+      <div class="header-status">
+        <span class="status-chip ok">● {dart_chip}</span>
+        <span class="status-chip ok">● {gemini_chip}</span>
+        <span class="updated-chip">{updated_text}</span>
+      </div>
     </div>
     """,
     unsafe_allow_html=True,
@@ -714,9 +836,9 @@ if analysis_category == "📊 기업 재무분석":
             columns=["항목", "금액"],
         )
         detail_col, source_col = st.columns([4, 1])
-        detail_col.dataframe(detail_rows, hide_index=True, use_container_width=True, height=150)
+        detail_col.dataframe(detail_rows, hide_index=True, width="stretch", height=150)
         if financials["source_url"]:
-            source_col.link_button("📄 DART 원문", financials["source_url"], use_container_width=True)
+            source_col.link_button("📄 DART 원문", financials["source_url"], width="stretch")
         source_col.caption("단위: 원\n연결재무제표 기준")
 
     st.markdown(
@@ -733,7 +855,7 @@ with left:
             st.info("DART API 키를 설정하면 최근 7일 공시가 이 영역에 표시됩니다.")
             st.dataframe(
                 pd.DataFrame(columns=["접수일", "기업", "보고서"]),
-                use_container_width=True, hide_index=True, height=190,
+                width="stretch", hide_index=True, height=190,
             )
         else:
             render_dart_link_table(st.session_state.dart)
@@ -745,7 +867,7 @@ with left:
             row = st.session_state.dart.iloc[idx]
             dart_key = f"dart::{row['rcept_no']}"
             a, b = st.columns(2)
-            if a.button("🧠 AI 분석", use_container_width=True):
+            if a.button("🧠 AI 분석", width="stretch"):
                 st.session_state.ai[dart_key] = analyze_content_with_llm(
                     row["report_nm"],
                     f"기업명: {row['corp_name']}\n접수일자: {row['rcept_dt']}\n접수번호: {row['rcept_no']}",
@@ -753,7 +875,7 @@ with left:
                 )
                 st.session_state.selected = dart_key
                 st.rerun()
-            b.link_button("📄 원문", row["url"], use_container_width=True)
+            b.link_button("📄 원문", row["url"], width="stretch")
 
 with right:
     with st.container(border=True):
@@ -765,7 +887,7 @@ with right:
                 c1, c2, c3 = st.columns([1.3, 6.2, 1.25], vertical_alignment="center")
                 c1.markdown(f"**{badge(item['ai']['sentiment'])}**  \n`{item['corp_name']}`")
                 c2.markdown(f"**{item['title']}**  \n<small>{item['source']} · {item['time']}</small>", unsafe_allow_html=True)
-                if c3.button("브리핑", key=f"news_{i}", use_container_width=True):
+                if c3.button("브리핑", key=f"news_{i}", width="stretch"):
                     with st.spinner("Gemini가 심층 분석 중입니다..."):
                         st.session_state.ai[item["key"]] = analyze_content_with_llm(
                             item["title"],
@@ -813,8 +935,8 @@ if selected_result:
         with st.container(border=True):
             st.caption("EXECUTIVE ACTION")
             if selected_url:
-                st.link_button("📄 원문 열기", selected_url, use_container_width=True)
-            if st.button("🚀 Teams 발송", type="primary", use_container_width=True):
+                st.link_button("📄 원문 열기", selected_url, width="stretch")
+            if st.button("🚀 Teams 발송", type="primary", width="stretch"):
                 if send_teams_alert(selected_title, selected_company, selected_result, selected_url):
                     st.success("발송 완료")
                 else:
