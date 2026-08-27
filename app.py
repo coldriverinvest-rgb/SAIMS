@@ -441,6 +441,18 @@ st.markdown(
     .block-container { max-width: 100%; padding: .65rem 1.1rem .35rem; }
     [data-testid="stSidebar"] { background: #101d38; }
     [data-testid="stSidebar"] * { color: #f5f8ff; }
+    [data-testid="stSidebar"] input,
+    [data-testid="stSidebar"] textarea {
+        color: #172033 !important;
+        -webkit-text-fill-color: #172033 !important;
+        caret-color: #2f6bff !important;
+    }
+    [data-testid="stSidebar"] input::placeholder,
+    [data-testid="stSidebar"] textarea::placeholder {
+        color: #7b879c !important;
+        -webkit-text-fill-color: #7b879c !important;
+        opacity: 1 !important;
+    }
     [data-testid="stSidebar"] .stButton button { border: 0; background: #2f6bff; }
     [data-testid="stMetric"] {
         background: #fff; border: 1px solid #dfe6f1; border-radius: 12px;
