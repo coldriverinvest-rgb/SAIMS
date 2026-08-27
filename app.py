@@ -17,9 +17,10 @@ DART_API_KEY = os.getenv("DART_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 TEAMS_WEBHOOK_URL = os.getenv("TEAMS_WEBHOOK_URL", "")
 
+OWN_COMPANIES = ["포스코퓨처엠"]
 COMPETITORS = ["포스코홀딩스", "LG화학", "에코프로비엠", "엘앤에프", "BASF"]
 CUSTOMERS = ["LG에너지솔루션", "삼성SDI", "SK온", "GM", "현대차"]
-COMPANIES = COMPETITORS + CUSTOMERS
+COMPANIES = OWN_COMPANIES + COMPETITORS + CUSTOMERS
 DART_COLUMNS = ["rcept_dt", "corp_name", "report_nm", "rcept_no", "url"]
 
 
@@ -108,7 +109,8 @@ def fetch_company_news(corp_name: str, max_items: int = 5) -> list[dict]:
                 source = source or source_from_title
             p = entry.get("published_parsed")
             time_value = datetime(*p[:6]).strftime("%Y-%m-%d %H:%M") if p else text(entry.get("published"), "시간 미상")
-            result.append({"title": title, "source": source, "time": time_value, "link": text(entry.get("link")), "summary": strip_html(entry.get("summary", "")), "corp_name": corp_name, "group_type": "고객사" if corp_name in CUSTOMERS else "경쟁사"})
+            group_type = "자사" if corp_name in OWN_COMPANIES else ("고객사" if corp_name in CUSTOMERS else "경쟁사")
+            result.append({"title": title, "source": source, "time": time_value, "link": text(entry.get("link")), "summary": strip_html(entry.get("summary", "")), "corp_name": corp_name, "group_type": group_type})
         return result
     except Exception:
         return []
@@ -342,7 +344,7 @@ with left:
                 st.session_state.ai[dart_key] = analyze_content_with_llm(
                     row["report_nm"],
                     f"기업명: {row['corp_name']}\n접수일자: {row['rcept_dt']}\n접수번호: {row['rcept_no']}",
-                    "고객사" if row["corp_name"] in CUSTOMERS else "경쟁사",
+                    "자사" if row["corp_name"] in OWN_COMPANIES else ("고객사" if row["corp_name"] in CUSTOMERS else "경쟁사"),
                 )
                 st.session_state.selected = dart_key
                 st.rerun()
