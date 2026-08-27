@@ -510,6 +510,13 @@ st.markdown(
         --radar-ink:#12203a; --radar-muted:#718096; --radar-line:#dce5f1;
         --radar-surface:rgba(255,255,255,.94);
     }
+    [data-testid="stHeader"] {
+        height:0 !important; min-height:0 !important; background:transparent !important;
+    }
+    [data-testid="stToolbar"], [data-testid="stDecoration"],
+    [data-testid="stStatusWidget"], .stAppDeployButton, #MainMenu {
+        display:none !important;
+    }
     html, body, [class*="css"] { font-family:"Pretendard","Inter","Segoe UI",sans-serif; }
     .stApp {
         background:
@@ -517,7 +524,7 @@ st.markdown(
             radial-gradient(circle at 12% 96%, rgba(41,199,201,.08), transparent 24rem),
             #f4f7fb;
     }
-    .block-container { padding:.7rem 1.25rem .4rem; }
+    .block-container { padding:.35rem 1.25rem .4rem; }
     [data-testid="stSidebar"] {
         background:
             radial-gradient(circle at 15% 4%, rgba(41,199,201,.16), transparent 14rem),
