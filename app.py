@@ -1,5 +1,6 @@
 import json
 import os
+import html
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from urllib.parse import quote
@@ -232,6 +233,30 @@ def badge(sentiment: str) -> str:
     return {"주의": "🔴 주의", "기회": "🟢 기회", "중립": "🟡 중립"}.get(sentiment, "🟡 중립")
 
 
+def render_dart_link_table(dart_df: pd.DataFrame) -> None:
+    rows = []
+    for _, disclosure in dart_df.iterrows():
+        receipt_date = html.escape(text(disclosure.get("rcept_dt")))
+        company = html.escape(text(disclosure.get("corp_name")))
+        report_name = html.escape(text(disclosure.get("report_nm")))
+        source_url = html.escape(text(disclosure.get("url")), quote=True)
+        report_cell = (
+            f'<a href="{source_url}" target="_blank" rel="noopener noreferrer" '
+            f'title="DART 원문 열기">{report_name}</a>'
+            if source_url
+            else report_name
+        )
+        rows.append(
+            f"<tr><td>{receipt_date}</td><td>{company}</td><td>{report_cell}</td></tr>"
+        )
+    st.markdown(
+        '<div class="dart-table-wrap"><table class="dart-table">'
+        '<thead><tr><th>접수일</th><th>기업</th><th>보고서</th></tr></thead>'
+        f'<tbody>{"".join(rows)}</tbody></table></div>',
+        unsafe_allow_html=True,
+    )
+
+
 def quick_classify_news(item: dict) -> dict:
     content = f"{item.get('title', '')} {item.get('summary', '')}".lower()
     caution_words = ["증설", "capex", "특허", "점유율", "경쟁", "하향", "적자", "감축", "매각"]
@@ -309,6 +334,20 @@ st.markdown(
     .brief-strategy { background:#eef4ff; color:#234584; border-radius:8px; padding:7px 9px; font-size:.78rem; }
     .footer-note { color:#738198; font-size:.67rem; text-align:right; margin-top:3px; }
     .stDataFrame { border-radius:10px; overflow:hidden; }
+    .dart-table-wrap {
+        height:190px; overflow:auto; border:1px solid #e1e7f0;
+        border-radius:10px; margin:.35rem 0 .55rem; background:#fff;
+    }
+    .dart-table { width:100%; border-collapse:collapse; font-size:.78rem; }
+    .dart-table th {
+        position:sticky; top:0; z-index:1; text-align:left; padding:8px 10px;
+        color:#64748b; background:#f5f7fb; border-bottom:1px solid #dfe6f1;
+    }
+    .dart-table td { padding:8px 10px; border-bottom:1px solid #edf1f6; color:#26344d; }
+    .dart-table th:nth-child(1), .dart-table td:nth-child(1) { width:88px; white-space:nowrap; }
+    .dart-table th:nth-child(2), .dart-table td:nth-child(2) { width:110px; white-space:nowrap; }
+    .dart-table a { color:#2159c5; text-decoration:none; font-weight:650; }
+    .dart-table a:hover { color:#123f99; text-decoration:underline; }
     div.stButton > button, div.stLinkButton > a { min-height:2rem; padding:.25rem .55rem; font-size:.76rem; }
     div[data-testid="stAlert"] { padding:.55rem .7rem; font-size:.78rem; }
     hr { margin:.35rem 0 !important; }
@@ -412,12 +451,7 @@ with left:
                 use_container_width=True, hide_index=True, height=190,
             )
         else:
-            display = st.session_state.dart.rename(columns={"rcept_dt": "접수일", "corp_name": "기업", "report_nm": "보고서"})
-            st.dataframe(
-                display[["접수일", "기업", "보고서"]], use_container_width=True,
-                hide_index=True, height=190,
-                column_config={"보고서": st.column_config.TextColumn(width="large")},
-            )
+            render_dart_link_table(st.session_state.dart)
             idx = st.selectbox(
                 "분석 대상 공시", range(len(st.session_state.dart)),
                 format_func=lambda i: f"{st.session_state.dart.iloc[i]['corp_name']} | {st.session_state.dart.iloc[i]['report_nm']}",
