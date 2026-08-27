@@ -15,6 +15,8 @@ from openai import OpenAI
 load_dotenv()
 DART_API_KEY = os.getenv("DART_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
 TEAMS_WEBHOOK_URL = os.getenv("TEAMS_WEBHOOK_URL", "")
 
 OWN_COMPANIES = ["포스코퓨처엠"]
@@ -132,20 +134,82 @@ def validate_ai(result) -> dict:
 
 
 def analyze_content_with_llm(title: str, text_value: str, group_type: str = "경쟁사") -> dict:
-    if not OPENAI_API_KEY:
-        return default_ai()
-    try:
-        client = OpenAI(api_key=OPENAI_API_KEY)
-        response = client.chat.completions.create(
-            model="gpt-4o", temperature=0.2, response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": "당신은 배터리/소재 산업 전문 경영전략 수석 애널리스트입니다."},
-                {"role": "user", "content": f'''{group_type} 관련 공시/뉴스를 분석하세요. 경쟁사 CAPEX 증설·특허는 주의, 고객사 신규 수주·공급망 재편은 기회로 우선 분류하세요. 제목: {title}\n본문: {text_value}\n반드시 JSON만 반환: {{"summary_points":["핵심 사실 1","핵심 사실 2","핵심 사실 3"],"sentiment":"기회|주의|중립","priority":"HIGH|MID|LOW","strategic_implication":"경영진을 위한 한 줄 전략 제언"}}'''}
-            ],
-        )
-        return validate_ai(json.loads(response.choices[0].message.content))
-    except Exception:
-        return default_ai()
+    system_prompt = "당신은 배터리/소재 산업 전문 경영전략 수석 애널리스트입니다."
+    user_prompt = f'''{group_type} 관련 공시/뉴스를 분석하세요.
+경쟁사 CAPEX 증설·특허는 주의, 고객사 신규 수주·공급망 재편은 기회로 우선 분류하세요.
+제목: {title}
+본문: {text_value}
+반드시 JSON만 반환하세요:
+{{"summary_points":["핵심 사실 1","핵심 사실 2","핵심 사실 3"],"sentiment":"기회|주의|중립","priority":"HIGH|MID|LOW","strategic_implication":"경영진을 위한 한 줄 전략 제언"}}'''
+
+    if GEMINI_API_KEY:
+        try:
+            schema = {
+                "type": "OBJECT",
+                "properties": {
+                    "summary_points": {
+                        "type": "ARRAY",
+                        "items": {"type": "STRING"},
+                        "minItems": 3,
+                        "maxItems": 3,
+                    },
+                    "sentiment": {
+                        "type": "STRING",
+                        "enum": ["기회", "주의", "중립"],
+                    },
+                    "priority": {
+                        "type": "STRING",
+                        "enum": ["HIGH", "MID", "LOW"],
+                    },
+                    "strategic_implication": {"type": "STRING"},
+                },
+                "required": [
+                    "summary_points",
+                    "sentiment",
+                    "priority",
+                    "strategic_implication",
+                ],
+            }
+            response = requests.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
+                headers={
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": GEMINI_API_KEY,
+                },
+                json={
+                    "systemInstruction": {"parts": [{"text": system_prompt}]},
+                    "contents": [{"parts": [{"text": user_prompt}]}],
+                    "generationConfig": {
+                        "temperature": 0.2,
+                        "responseMimeType": "application/json",
+                        "responseSchema": schema,
+                    },
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            response_text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
+            return validate_ai(json.loads(response_text))
+        except Exception:
+            pass
+
+    if OPENAI_API_KEY:
+        try:
+            client = OpenAI(api_key=OPENAI_API_KEY)
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                temperature=0.2,
+                response_format={"type": "json_object"},
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            )
+            return validate_ai(json.loads(response.choices[0].message.content))
+        except Exception:
+            pass
+
+    return default_ai()
 
 
 def send_teams_alert(title: str, corp_name: str, ai_result: dict, source_url: str) -> bool:
@@ -166,6 +230,28 @@ def send_teams_alert(title: str, corp_name: str, ai_result: dict, source_url: st
 
 def badge(sentiment: str) -> str:
     return {"주의": "🔴 주의", "기회": "🟢 기회", "중립": "🟡 중립"}.get(sentiment, "🟡 중립")
+
+
+def quick_classify_news(item: dict) -> dict:
+    content = f"{item.get('title', '')} {item.get('summary', '')}".lower()
+    caution_words = ["증설", "capex", "특허", "점유율", "경쟁", "하향", "적자", "감축", "매각"]
+    opportunity_words = ["수주", "공급계약", "협력", "공급망", "신규 공급", "파트너십", "양산"]
+    if any(word in content for word in caution_words):
+        sentiment, priority = "주의", "MID"
+    elif any(word in content for word in opportunity_words):
+        sentiment, priority = "기회", "MID"
+    else:
+        sentiment, priority = "중립", "LOW"
+    return {
+        "summary_points": [
+            item.get("title", "뉴스 제목 확인 필요"),
+            f"출처: {item.get('source', '출처 미상')}",
+            "브리핑을 선택하면 Gemini가 심층 분석합니다.",
+        ],
+        "sentiment": sentiment,
+        "priority": priority,
+        "strategic_implication": "Gemini 심층 분석 대기 중입니다.",
+    }
 
 
 def render_ai(result: dict):
@@ -287,7 +373,7 @@ news_items = []
 for item in st.session_state.news:
     key = f"news::{item['link'] or item['title']}"
     if key not in st.session_state.ai:
-        st.session_state.ai[key] = analyze_content_with_llm(item["title"], item["summary"], item["group_type"])
+        st.session_state.ai[key] = quick_classify_news(item)
     item = dict(item, key=key, ai=validate_ai(st.session_state.ai[key]))
     if sentiment_filter == "전체" or item["ai"]["sentiment"] == {"🔴 주의": "주의", "🟢 기회": "기회", "🟡 중립": "중립"}.get(sentiment_filter):
         news_items.append(item)
@@ -361,6 +447,12 @@ with right:
                 c1.markdown(f"**{badge(item['ai']['sentiment'])}**  \n`{item['corp_name']}`")
                 c2.markdown(f"**{item['title']}**  \n<small>{item['source']} · {item['time']}</small>", unsafe_allow_html=True)
                 if c3.button("브리핑", key=f"news_{i}", use_container_width=True):
+                    with st.spinner("Gemini가 심층 분석 중입니다..."):
+                        st.session_state.ai[item["key"]] = analyze_content_with_llm(
+                            item["title"],
+                            item["summary"],
+                            item["group_type"],
+                        )
                     st.session_state.selected = item["key"]
                     st.rerun()
                 st.markdown("<hr>", unsafe_allow_html=True)
