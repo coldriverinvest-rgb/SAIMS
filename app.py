@@ -94,7 +94,7 @@ def fetch_company_news(corp_name: str, max_items: int = 5) -> list[dict]:
         url = f"https://news.google.com/rss/search?q={quote(corp_name)}&hl=ko&gl=KR&ceid=KR:ko"
         response = requests.get(
             url,
-            headers={"User-Agent": "Mozilla/5.0 SAIMS/1.0"},
+            headers={"User-Agent": "Mozilla/5.0 FUTURE-M-RADAR/1.0"},
             timeout=6,
         )
         response.raise_for_status()
@@ -154,7 +154,7 @@ def send_teams_alert(title: str, corp_name: str, ai_result: dict, source_url: st
         sentiment = r["sentiment"]
         header = {"주의": "🚨 주의", "기회": "💡 기회", "중립": "🟡 중립"}[sentiment]
         summary = "\n".join(f"• {x}" for x in r["summary_points"])
-        content = {"type": "message", "attachments": [{"contentType": "application/vnd.microsoft.card.adaptive", "content": {"$schema": "http://adaptivecards.io/schemas/adaptive-card.json", "type": "AdaptiveCard", "version": "1.4", "body": [{"type": "TextBlock", "text": f"{header} | SAIMS 경영기획 인텔리전스", "weight": "Bolder", "size": "Large", "wrap": True}, {"type": "TextBlock", "text": title, "weight": "Bolder", "wrap": True}, {"type": "FactSet", "facts": [{"title": "기업명", "value": corp_name}, {"title": "우선순위", "value": r["priority"]}, {"title": "감지시각", "value": datetime.now().strftime("%Y-%m-%d %H:%M:%S")} ]}, {"type": "TextBlock", "text": "AI 3줄 요약", "weight": "Bolder"}, {"type": "TextBlock", "text": summary, "wrap": True}, {"type": "TextBlock", "text": "전략 시사점", "weight": "Bolder"}, {"type": "TextBlock", "text": r["strategic_implication"], "wrap": True}], "actions": [{"type": "Action.OpenUrl", "title": "📄 원문 바로가기", "url": source_url}] if source_url else []}}]}
+        content = {"type": "message", "attachments": [{"contentType": "application/vnd.microsoft.card.adaptive", "content": {"$schema": "http://adaptivecards.io/schemas/adaptive-card.json", "type": "AdaptiveCard", "version": "1.4", "body": [{"type": "TextBlock", "text": f"{header} | FUTURE:M RADAR", "weight": "Bolder", "size": "Large", "wrap": True}, {"type": "TextBlock", "text": title, "weight": "Bolder", "wrap": True}, {"type": "FactSet", "facts": [{"title": "기업명", "value": corp_name}, {"title": "우선순위", "value": r["priority"]}, {"title": "감지시각", "value": datetime.now().strftime("%Y-%m-%d %H:%M:%S")} ]}, {"type": "TextBlock", "text": "AI 3줄 요약", "weight": "Bolder"}, {"type": "TextBlock", "text": summary, "wrap": True}, {"type": "TextBlock", "text": "전략 시사점", "weight": "Bolder"}, {"type": "TextBlock", "text": r["strategic_implication"], "wrap": True}], "actions": [{"type": "Action.OpenUrl", "title": "📄 원문 바로가기", "url": source_url}] if source_url else []}}]}
         response = requests.post(TEAMS_WEBHOOK_URL, headers={"Content-Type": "application/json"}, json=content, timeout=15)
         response.raise_for_status()
         return True
@@ -175,7 +175,7 @@ def render_ai(result: dict):
 
 
 st.set_page_config(
-    page_title="SAIMS 경영기획 인텔리전스",
+    page_title="FUTURE:M RADAR",
     page_icon="🔋",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -239,7 +239,7 @@ for key, default in {
     if key not in st.session_state:
         st.session_state[key] = default
 
-st.sidebar.title("🔋 SAIMS CONTROL")
+st.sidebar.title("🔋 FUTURE:M RADAR")
 st.sidebar.caption("Battery & Materials Intelligence")
 companies = st.sidebar.multiselect("모니터링 풀", COMPANIES, default=COMPANIES)
 sentiment_filter = st.sidebar.selectbox("감성 필터", ["전체", "🔴 주의", "🟢 기회", "🟡 중립"])
@@ -316,7 +316,7 @@ st.markdown(
     f"""
     <div class="saims-header">
       <div>
-        <div class="saims-brand">SAIMS 경영기획 인텔리전스</div>
+        <div class="saims-brand">FUTURE:M RADAR</div>
         <div class="saims-sub">SECONDARY BATTERY · MATERIALS · DISCLOSURE · NEWS</div>
       </div>
       <div class="saims-live"><span class="live-dot">●</span> LIVE &nbsp;|&nbsp; {updated_text}</div>
@@ -437,6 +437,6 @@ else:
     )
 
 st.markdown(
-    f'<div class="footer-note">SAIMS v1.0 · 모니터링 {len(companies)}개사 · 마지막 갱신 {updated_text}</div>',
+    f'<div class="footer-note">FUTURE:M RADAR v1.0 · 모니터링 {len(companies)}개사 · 마지막 갱신 {updated_text}</div>',
     unsafe_allow_html=True,
 )
