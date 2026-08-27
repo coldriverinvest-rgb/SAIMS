@@ -84,6 +84,111 @@ def fetch_dart_disclosures(
         return empty_dart()
 
 
+def parse_amount(value) -> float | None:
+    raw = text(value).replace(",", "").strip()
+    if not raw or raw in {"-", "None", "nan"}:
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def pick_account(statement: pd.DataFrame, account_ids: list[str], cumulative=False) -> tuple[float | None, float | None]:
+    if statement is None or statement.empty:
+        return None, None
+    matched = statement[statement["account_id"].isin(account_ids)]
+    if matched.empty:
+        return None, None
+    row = matched.iloc[0]
+    current_field = "thstrm_add_amount" if cumulative and parse_amount(row.get("thstrm_add_amount")) is not None else "thstrm_amount"
+    prior_field = "frmtrm_add_amount" if cumulative and parse_amount(row.get("frmtrm_add_amount")) is not None else "frmtrm_amount"
+    return parse_amount(row.get(current_field)), parse_amount(row.get(prior_field))
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_customer_financials(corp_name: str, year: int, report_code: str, api_key: str = "") -> dict:
+    resolved_key = api_key or DART_API_KEY
+    if not resolved_key:
+        return {}
+    try:
+        dart = OpenDartReader(resolved_key)
+        statement = dart.finstate_all(corp_name, year, reprt_code=report_code, fs_div="CFS")
+        if statement is None or statement.empty:
+            return {}
+
+        assets, prior_assets = pick_account(statement, ["ifrs-full_Assets", "ifrs_Assets"])
+        liabilities, prior_liabilities = pick_account(statement, ["ifrs-full_Liabilities", "ifrs_Liabilities"])
+        equity, prior_equity = pick_account(statement, ["ifrs-full_Equity", "ifrs_Equity"])
+        current_assets, _ = pick_account(statement, ["ifrs-full_CurrentAssets", "ifrs_CurrentAssets"])
+        current_liabilities, _ = pick_account(statement, ["ifrs-full_CurrentLiabilities", "ifrs_CurrentLiabilities"])
+        revenue, prior_revenue = pick_account(
+            statement,
+            ["ifrs-full_Revenue", "ifrs_Revenue", "dart_Revenue"],
+            cumulative=True,
+        )
+        operating_income, prior_operating_income = pick_account(
+            statement,
+            ["dart_OperatingIncomeLoss", "ifrs-full_ProfitLossFromOperatingActivities"],
+            cumulative=True,
+        )
+        net_income, prior_net_income = pick_account(
+            statement,
+            ["ifrs-full_ProfitLoss", "ifrs_ProfitLoss"],
+            cumulative=True,
+        )
+        receipt_no = text(statement.iloc[0].get("rcept_no"))
+        return {
+            "corp_name": corp_name,
+            "year": year,
+            "report_code": report_code,
+            "receipt_no": receipt_no,
+            "source_url": f"https://dart.fss.or.kr/dsaf001/main.do?rcpNo={receipt_no}" if receipt_no else "",
+            "assets": assets,
+            "liabilities": liabilities,
+            "equity": equity,
+            "current_assets": current_assets,
+            "current_liabilities": current_liabilities,
+            "revenue": revenue,
+            "operating_income": operating_income,
+            "net_income": net_income,
+            "prior_assets": prior_assets,
+            "prior_liabilities": prior_liabilities,
+            "prior_equity": prior_equity,
+            "prior_revenue": prior_revenue,
+            "prior_operating_income": prior_operating_income,
+            "prior_net_income": prior_net_income,
+        }
+    except Exception:
+        return {}
+
+
+def safe_ratio(numerator, denominator) -> float | None:
+    if numerator is None or denominator in (None, 0):
+        return None
+    return numerator / denominator * 100
+
+
+def format_krw(value) -> str:
+    if value is None:
+        return "N/A"
+    sign = "-" if value < 0 else ""
+    absolute = abs(value)
+    if absolute >= 1_000_000_000_000:
+        return f"{sign}{absolute / 1_000_000_000_000:,.2f}조"
+    return f"{sign}{absolute / 100_000_000:,.0f}억"
+
+
+def format_ratio(value) -> str:
+    return "N/A" if value is None else f"{value:,.1f}%"
+
+
+def growth_rate(current, prior) -> float | None:
+    if current is None or prior in (None, 0):
+        return None
+    return (current - prior) / abs(prior) * 100
+
+
 def strip_html(value: str) -> str:
     value = text(value).replace("<br>", " ").replace("<br/>", " ").replace("&nbsp;", " ")
     while "<" in value and ">" in value:
@@ -369,6 +474,10 @@ for key, default in {
 
 st.sidebar.title("🔋 FUTURE:M RADAR")
 st.sidebar.caption("Battery & Materials Intelligence")
+analysis_category = st.sidebar.radio(
+    "분석 카테고리",
+    ["📡 산업 인텔리전스", "📊 고객사 재무분석"],
+)
 companies = st.sidebar.multiselect("모니터링 풀", COMPANIES, default=COMPANIES)
 current_signature = tuple(companies)
 if st.session_state.monitor_signature is None:
@@ -442,15 +551,86 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-today = datetime.now().strftime("%Y-%m-%d")
-today_count = int(st.session_state.dart["rcept_dt"].str.startswith(today).sum()) if not st.session_state.dart.empty else 0
-high_count = sum(x["ai"]["priority"] == "HIGH" or x["ai"]["sentiment"] == "주의" for x in news_items)
-opportunity_count = sum(x["ai"]["sentiment"] == "기회" for x in news_items)
-k1, k2, k3, k4 = st.columns(4)
-k1.metric("오늘 수집 공시", today_count)
-k2.metric("긴급 주의(High Risk)", high_count)
-k3.metric("수주 기회(Opportunity)", opportunity_count)
-k4.metric("수집 뉴스", len(news_items))
+if analysis_category == "📊 고객사 재무분석":
+    report_options = {
+        "1분기보고서": "11013",
+        "반기보고서": "11012",
+        "3분기보고서": "11014",
+        "사업보고서": "11011",
+    }
+    control1, control2, control3 = st.columns([1.4, 1, 1.4])
+    finance_company = control1.selectbox("고객사", CUSTOMERS)
+    current_year = datetime.now().year
+    finance_year = control2.selectbox("사업연도", list(range(current_year, current_year - 5, -1)))
+    report_label = control3.selectbox("보고서", list(report_options.keys()), index=1)
+    with st.spinner("DART 연결재무제표를 불러오는 중입니다..."):
+        financials = fetch_customer_financials(
+            finance_company,
+            finance_year,
+            report_options[report_label],
+            st.session_state.dart_api_key,
+        )
+
+    if not financials:
+        st.warning(f"{finance_company}의 {finance_year}년 {report_label} 연결재무제표가 없습니다. 비상장사이거나 아직 보고서가 제출되지 않았을 수 있습니다.")
+    else:
+        debt_ratio = safe_ratio(financials["liabilities"], financials["equity"])
+        current_ratio = safe_ratio(financials["current_assets"], financials["current_liabilities"])
+        equity_ratio = safe_ratio(financials["equity"], financials["assets"])
+        operating_margin = safe_ratio(financials["operating_income"], financials["revenue"])
+        net_margin = safe_ratio(financials["net_income"], financials["revenue"])
+        roa = safe_ratio(financials["net_income"], financials["assets"])
+
+        st.markdown(f"### {finance_company} · {finance_year} {report_label} 연결기준")
+        result_cols = st.columns(5)
+        result_cols[0].metric("매출액", format_krw(financials["revenue"]), format_ratio(growth_rate(financials["revenue"], financials["prior_revenue"])))
+        result_cols[1].metric("영업이익", format_krw(financials["operating_income"]), format_ratio(growth_rate(financials["operating_income"], financials["prior_operating_income"])))
+        result_cols[2].metric("당기순이익", format_krw(financials["net_income"]), format_ratio(growth_rate(financials["net_income"], financials["prior_net_income"])))
+        result_cols[3].metric("자산총계", format_krw(financials["assets"]))
+        result_cols[4].metric("부채총계", format_krw(financials["liabilities"]))
+
+        health_col, profit_col = st.columns(2, gap="medium")
+        with health_col:
+            with st.container(border=True):
+                st.markdown("#### 🛡️ 재무 건전성")
+                h1, h2, h3 = st.columns(3)
+                h1.metric("부채비율", format_ratio(debt_ratio))
+                h2.metric("유동비율", format_ratio(current_ratio))
+                h3.metric("자기자본비율", format_ratio(equity_ratio))
+                health_status = "안정" if debt_ratio is not None and debt_ratio < 150 and current_ratio is not None and current_ratio >= 100 else "점검 필요"
+                st.info(f"건전성 진단: **{health_status}** · 부채비율과 단기 지급능력을 연결 재무상태표 기준으로 평가했습니다.")
+        with profit_col:
+            with st.container(border=True):
+                st.markdown("#### 📈 수익성")
+                p1, p2, p3 = st.columns(3)
+                p1.metric("영업이익률", format_ratio(operating_margin))
+                p2.metric("순이익률", format_ratio(net_margin))
+                p3.metric("ROA", format_ratio(roa))
+                profit_status = "양호" if operating_margin is not None and operating_margin > 5 and net_margin is not None and net_margin > 0 else "개선 필요"
+                st.info(f"수익성 진단: **{profit_status}** · 선택 보고서의 누적 손익과 기말 자산을 기준으로 계산했습니다.")
+
+        detail_rows = pd.DataFrame(
+            [
+                ["유동자산", format_krw(financials["current_assets"])],
+                ["유동부채", format_krw(financials["current_liabilities"])],
+                ["자본총계", format_krw(financials["equity"])],
+                ["전기 매출액", format_krw(financials["prior_revenue"])],
+                ["전기 영업이익", format_krw(financials["prior_operating_income"])],
+                ["전기 순이익", format_krw(financials["prior_net_income"])],
+            ],
+            columns=["항목", "금액"],
+        )
+        detail_col, source_col = st.columns([4, 1])
+        detail_col.dataframe(detail_rows, hide_index=True, use_container_width=True, height=150)
+        if financials["source_url"]:
+            source_col.link_button("📄 DART 원문", financials["source_url"], use_container_width=True)
+        source_col.caption("단위: 원\n연결재무제표 기준")
+
+    st.markdown(
+        f'<div class="footer-note">FUTURE:M RADAR · 고객사 재무분석 · 마지막 조회 {datetime.now().strftime("%Y-%m-%d %H:%M")}</div>',
+        unsafe_allow_html=True,
+    )
+    st.stop()
 
 left, right = st.columns([1.05, 1.35], gap="medium")
 with left:
