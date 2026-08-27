@@ -21,8 +21,8 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
 TEAMS_WEBHOOK_URL = os.getenv("TEAMS_WEBHOOK_URL", "")
 
 OWN_COMPANIES = ["포스코퓨처엠"]
-COMPETITORS = ["포스코홀딩스", "LG화학", "에코프로비엠", "엘앤에프", "BASF"]
-CUSTOMERS = ["LG에너지솔루션", "삼성SDI", "SK온", "GM", "현대차"]
+COMPETITORS = ["포스코홀딩스", "LG화학", "에코프로비엠", "엘앤에프"]
+CUSTOMERS = ["LG에너지솔루션", "삼성SDI", "SK온", "현대차"]
 COMPANIES = OWN_COMPANIES + COMPETITORS + CUSTOMERS
 DART_COLUMNS = ["rcept_dt", "corp_name", "report_nm", "rcept_no", "url"]
 
@@ -362,6 +362,7 @@ for key, default in {
     "selected": None,
     "updated": None,
     "dart_api_key": DART_API_KEY,
+    "monitor_signature": None,
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -369,6 +370,17 @@ for key, default in {
 st.sidebar.title("🔋 FUTURE:M RADAR")
 st.sidebar.caption("Battery & Materials Intelligence")
 companies = st.sidebar.multiselect("모니터링 풀", COMPANIES, default=COMPANIES)
+current_signature = tuple(companies)
+if st.session_state.monitor_signature is None:
+    st.session_state.monitor_signature = current_signature
+elif st.session_state.monitor_signature != current_signature:
+    st.session_state.monitor_signature = current_signature
+    st.session_state.dart = empty_dart()
+    st.session_state.news = []
+    st.session_state.ai = {}
+    st.session_state.selected = None
+    st.session_state.updated = None
+    st.rerun()
 sentiment_filter = st.sidebar.selectbox("감성 필터", ["전체", "🔴 주의", "🟢 기회", "🟡 중립"])
 if st.sidebar.button("🔄 실시간 데이터 갱신", type="primary", use_container_width=True):
     st.cache_data.clear()
