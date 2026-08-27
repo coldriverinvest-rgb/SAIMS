@@ -476,7 +476,7 @@ st.sidebar.title("🔋 FUTURE:M RADAR")
 st.sidebar.caption("Battery & Materials Intelligence")
 analysis_category = st.sidebar.radio(
     "분석 카테고리",
-    ["📡 산업 인텔리전스", "📊 고객사 재무분석"],
+    ["📡 산업 인텔리전스", "📊 기업 재무분석"],
 )
 companies = st.sidebar.multiselect("모니터링 풀", COMPANIES, default=COMPANIES)
 current_signature = tuple(companies)
@@ -551,7 +551,7 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-if analysis_category == "📊 고객사 재무분석":
+if analysis_category == "📊 기업 재무분석":
     report_options = {
         "1분기보고서": "11013",
         "반기보고서": "11012",
@@ -559,7 +559,7 @@ if analysis_category == "📊 고객사 재무분석":
         "사업보고서": "11011",
     }
     control1, control2, control3 = st.columns([1.4, 1, 1.4])
-    finance_company = control1.selectbox("고객사", CUSTOMERS)
+    finance_company = control1.selectbox("분석 기업", COMPANIES)
     current_year = datetime.now().year
     finance_year = control2.selectbox("사업연도", list(range(current_year, current_year - 5, -1)))
     report_label = control3.selectbox("보고서", list(report_options.keys()), index=1)
@@ -572,7 +572,7 @@ if analysis_category == "📊 고객사 재무분석":
         )
 
     if not financials:
-        st.warning(f"{finance_company}의 {finance_year}년 {report_label} 연결재무제표가 없습니다. 비상장사이거나 아직 보고서가 제출되지 않았을 수 있습니다.")
+        st.warning(f"{finance_company}의 {finance_year}년 {report_label} 연결재무제표가 없습니다. 비상장사·해외기업이거나 아직 보고서가 제출되지 않았을 수 있습니다.")
     else:
         debt_ratio = safe_ratio(financials["liabilities"], financials["equity"])
         current_ratio = safe_ratio(financials["current_assets"], financials["current_liabilities"])
@@ -627,7 +627,7 @@ if analysis_category == "📊 고객사 재무분석":
         source_col.caption("단위: 원\n연결재무제표 기준")
 
     st.markdown(
-        f'<div class="footer-note">FUTURE:M RADAR · 고객사 재무분석 · 마지막 조회 {datetime.now().strftime("%Y-%m-%d %H:%M")}</div>',
+        f'<div class="footer-note">FUTURE:M RADAR · 기업 재무분석 · 마지막 조회 {datetime.now().strftime("%Y-%m-%d %H:%M")}</div>',
         unsafe_allow_html=True,
     )
     st.stop()
