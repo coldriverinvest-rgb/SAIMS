@@ -58,11 +58,16 @@ def normalize_dart(raw) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def fetch_dart_disclosures(corp_name: str, days: int = 7) -> pd.DataFrame:
-    if not DART_API_KEY:
+def fetch_dart_disclosures(
+    corp_name: str,
+    days: int = 7,
+    api_key: str = "",
+) -> pd.DataFrame:
+    resolved_key = api_key or DART_API_KEY
+    if not resolved_key:
         return empty_dart()
     try:
-        dart = OpenDartReader(DART_API_KEY)
+        dart = OpenDartReader(resolved_key)
         today = datetime.now().date()
         start = today - timedelta(days=max(days - 1, 0))
         df = normalize_dart(dart.list(corp_name, start.strftime("%Y-%m-%d"), today.strftime("%Y-%m-%d")))
@@ -223,7 +228,14 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-for key, default in {"dart": empty_dart(), "news": [], "ai": {}, "selected": None, "updated": None}.items():
+for key, default in {
+    "dart": empty_dart(),
+    "news": [],
+    "ai": {},
+    "selected": None,
+    "updated": None,
+    "dart_api_key": DART_API_KEY,
+}.items():
     if key not in st.session_state:
         st.session_state[key] = default
 
@@ -231,6 +243,27 @@ st.sidebar.title("🔋 SAIMS CONTROL")
 st.sidebar.caption("Battery & Materials Intelligence")
 companies = st.sidebar.multiselect("모니터링 풀", COMPANIES, default=COMPANIES)
 sentiment_filter = st.sidebar.selectbox("감성 필터", ["전체", "🔴 주의", "🟢 기회", "🟡 중립"])
+st.sidebar.divider()
+st.sidebar.caption("DART API CONNECTION")
+dart_key_input = st.sidebar.text_input(
+    "OpenDART API 키",
+    value="",
+    type="password",
+    placeholder="발급받은 API 키 입력",
+    help="브라우저 세션 메모리에만 보관되며 GitHub에는 업로드되지 않습니다.",
+)
+dart_connected = bool(st.session_state.dart_api_key)
+st.sidebar.markdown("🟢 **연결됨**" if dart_connected else "🔴 **미연결**")
+if st.sidebar.button("🔐 DART API 연결", use_container_width=True):
+    if dart_key_input.strip():
+        st.session_state.dart_api_key = dart_key_input.strip()
+        st.cache_data.clear()
+        st.session_state.dart = empty_dart()
+        st.session_state.updated = None
+        st.sidebar.success("DART 키가 세션에 등록되었습니다.")
+        st.rerun()
+    else:
+        st.sidebar.warning("OpenDART API 키를 입력해 주세요.")
 if st.sidebar.button("🔄 실시간 데이터 갱신", type="primary", use_container_width=True):
     st.cache_data.clear()
     st.session_state.dart = empty_dart()
@@ -245,7 +278,15 @@ if st.session_state.updated is None and companies:
         dart_frames = []
         collected_news = []
         with ThreadPoolExecutor(max_workers=min(8, len(companies) * 2)) as executor:
-            dart_jobs = {executor.submit(fetch_dart_disclosures, c): c for c in companies}
+            dart_jobs = {
+                executor.submit(
+                    fetch_dart_disclosures,
+                    c,
+                    7,
+                    st.session_state.dart_api_key,
+                ): c
+                for c in companies
+            }
             news_jobs = {executor.submit(fetch_company_news, c): c for c in companies}
             for job in as_completed([*dart_jobs, *news_jobs]):
                 try:
