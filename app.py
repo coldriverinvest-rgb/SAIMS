@@ -163,6 +163,41 @@ def fetch_customer_financials(corp_name: str, year: int, report_code: str, api_k
         return {}
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def validate_listed_company(company_query: str, api_key: str = "") -> dict:
+    resolved_key = api_key or DART_API_KEY
+    query = company_query.strip()
+    if not resolved_key or not query:
+        return {"valid": False, "message": "기업명을 입력해 주세요."}
+    try:
+        dart = OpenDartReader(resolved_key)
+        corp_codes = dart.corp_codes.copy()
+        corp_codes["corp_name"] = corp_codes["corp_name"].fillna("").astype(str).str.strip()
+        corp_codes["stock_code"] = corp_codes["stock_code"].fillna("").astype(str).str.strip()
+        exact = corp_codes[
+            corp_codes["corp_name"].eq(query)
+            | corp_codes["stock_code"].eq(query.zfill(6) if query.isdigit() else query)
+        ]
+        listed = exact[exact["stock_code"].str.len().eq(6)]
+        if not listed.empty:
+            row = listed.iloc[0]
+            return {
+                "valid": True,
+                "corp_name": text(row["corp_name"]),
+                "stock_code": text(row["stock_code"]),
+            }
+        suggestions = corp_codes[
+            corp_codes["corp_name"].str.contains(query, case=False, regex=False)
+            & corp_codes["stock_code"].str.len().eq(6)
+        ]["corp_name"].head(3).tolist()
+        message = "정확한 상장기업명을 입력해 주세요."
+        if suggestions:
+            message += f" 검색 결과: {', '.join(suggestions)}"
+        return {"valid": False, "message": message}
+    except Exception:
+        return {"valid": False, "message": "OpenDART에서 기업 정보를 확인하지 못했습니다."}
+
+
 def safe_ratio(numerator, denominator) -> float | None:
     if numerator is None or denominator in (None, 0):
         return None
@@ -468,6 +503,8 @@ for key, default in {
     "updated": None,
     "dart_api_key": DART_API_KEY,
     "monitor_signature": None,
+    "custom_companies": [],
+    "company_add_message": None,
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -478,7 +515,51 @@ analysis_category = st.sidebar.radio(
     "분석 카테고리",
     ["📡 산업 인텔리전스", "📊 기업 재무분석"],
 )
-companies = st.sidebar.multiselect("모니터링 풀", COMPANIES, default=COMPANIES)
+st.sidebar.caption("상장기업 추가")
+company_to_add = st.sidebar.text_input(
+    "기업명 또는 종목코드",
+    placeholder="예: 롯데에너지머티리얼즈",
+    label_visibility="collapsed",
+)
+if st.sidebar.button("＋ 모니터링 기업 추가", use_container_width=True):
+    validation = validate_listed_company(company_to_add, st.session_state.dart_api_key)
+    if validation.get("valid"):
+        canonical_name = validation["corp_name"]
+        if canonical_name not in COMPANIES and canonical_name not in st.session_state.custom_companies:
+            st.session_state.custom_companies.append(canonical_name)
+        selected_pool = list(st.session_state.get("monitoring_pool", COMPANIES))
+        if canonical_name not in selected_pool:
+            selected_pool.append(canonical_name)
+        st.session_state.monitoring_pool = selected_pool
+        st.session_state.company_add_message = (
+            "success",
+            f"{canonical_name}({validation['stock_code']}) 추가 완료",
+        )
+        st.session_state.dart = empty_dart()
+        st.session_state.news = []
+        st.session_state.ai = {}
+        st.session_state.selected = None
+        st.session_state.updated = None
+        st.rerun()
+    else:
+        st.session_state.company_add_message = ("error", validation["message"])
+        st.rerun()
+
+if st.session_state.company_add_message:
+    message_type, message_text = st.session_state.company_add_message
+    if message_type == "success":
+        st.sidebar.success(message_text)
+    else:
+        st.sidebar.error(message_text)
+
+company_options = list(dict.fromkeys(COMPANIES + st.session_state.custom_companies))
+if "monitoring_pool" not in st.session_state:
+    st.session_state.monitoring_pool = company_options
+companies = st.sidebar.multiselect(
+    "모니터링 풀",
+    company_options,
+    key="monitoring_pool",
+)
 current_signature = tuple(companies)
 if st.session_state.monitor_signature is None:
     st.session_state.monitor_signature = current_signature
@@ -559,7 +640,7 @@ if analysis_category == "📊 기업 재무분석":
         "사업보고서": "11011",
     }
     control1, control2, control3 = st.columns([1.4, 1, 1.4])
-    finance_company = control1.selectbox("분석 기업", COMPANIES)
+    finance_company = control1.selectbox("분석 기업", companies or company_options)
     current_year = datetime.now().year
     finance_year = control2.selectbox("사업연도", list(range(current_year, current_year - 5, -1)))
     report_label = control3.selectbox("보고서", list(report_options.keys()), index=1)
