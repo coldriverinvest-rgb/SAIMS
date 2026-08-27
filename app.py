@@ -243,27 +243,6 @@ st.sidebar.title("🔋 FUTURE:M RADAR")
 st.sidebar.caption("Battery & Materials Intelligence")
 companies = st.sidebar.multiselect("모니터링 풀", COMPANIES, default=COMPANIES)
 sentiment_filter = st.sidebar.selectbox("감성 필터", ["전체", "🔴 주의", "🟢 기회", "🟡 중립"])
-st.sidebar.divider()
-st.sidebar.caption("DART API CONNECTION")
-dart_key_input = st.sidebar.text_input(
-    "OpenDART API 키",
-    value="",
-    type="password",
-    placeholder="발급받은 API 키 입력",
-    help="브라우저 세션 메모리에만 보관되며 GitHub에는 업로드되지 않습니다.",
-)
-dart_connected = bool(st.session_state.dart_api_key)
-st.sidebar.markdown("🟢 **연결됨**" if dart_connected else "🔴 **미연결**")
-if st.sidebar.button("🔐 DART API 연결", use_container_width=True):
-    if dart_key_input.strip():
-        st.session_state.dart_api_key = dart_key_input.strip()
-        st.cache_data.clear()
-        st.session_state.dart = empty_dart()
-        st.session_state.updated = None
-        st.sidebar.success("DART 키가 세션에 등록되었습니다.")
-        st.rerun()
-    else:
-        st.sidebar.warning("OpenDART API 키를 입력해 주세요.")
 if st.sidebar.button("🔄 실시간 데이터 갱신", type="primary", use_container_width=True):
     st.cache_data.clear()
     st.session_state.dart = empty_dart()
