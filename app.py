@@ -169,12 +169,66 @@ def render_ai(result: dict):
     st.info(f"전략 시사점: {result['strategic_implication']}")
 
 
-st.set_page_config(page_title="SAIMS 경영기획 인텔리전스", page_icon="🔋", layout="wide")
+st.set_page_config(
+    page_title="SAIMS 경영기획 인텔리전스",
+    page_icon="🔋",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+st.markdown(
+    """
+    <style>
+    .stApp { background: #f3f6fb; color: #172033; }
+    .block-container { max-width: 100%; padding: .65rem 1.1rem .35rem; }
+    [data-testid="stSidebar"] { background: #101d38; }
+    [data-testid="stSidebar"] * { color: #f5f8ff; }
+    [data-testid="stSidebar"] .stButton button { border: 0; background: #2f6bff; }
+    [data-testid="stMetric"] {
+        background: #fff; border: 1px solid #dfe6f1; border-radius: 12px;
+        padding: .55rem .8rem; box-shadow: 0 2px 8px rgba(20,38,70,.05);
+    }
+    [data-testid="stMetricLabel"] { font-size: .78rem; color: #60708c; }
+    [data-testid="stMetricValue"] { font-size: 1.65rem; color: #172033; }
+    h1, h2, h3, h4 { color: #172033; }
+    h3 { font-size: 1rem !important; margin: .15rem 0 .35rem !important; }
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        background: #fff; border-color: #dfe6f1; border-radius: 12px;
+    }
+    .saims-header {
+        display:flex; align-items:center; justify-content:space-between;
+        background:linear-gradient(110deg,#12213f,#1c3970); color:#fff;
+        border-radius:14px; padding:10px 16px; margin-bottom:8px;
+        box-shadow:0 5px 18px rgba(16,33,65,.16);
+    }
+    .saims-brand { font-size:1.18rem; font-weight:800; letter-spacing:.02em; }
+    .saims-sub { color:#b9c9ea; font-size:.76rem; margin-top:2px; }
+    .saims-live { font-size:.76rem; color:#dce7ff; }
+    .live-dot { color:#47dc91; margin-right:5px; }
+    .panel-title { font-size:.93rem; font-weight:750; color:#1a2843; }
+    .brief-card {
+        background:#fff; border:1px solid #dfe6f1; border-radius:12px;
+        padding:10px 13px; min-height:126px;
+    }
+    .brief-label { color:#64748b; font-size:.72rem; font-weight:700; text-transform:uppercase; }
+    .brief-title { font-size:.92rem; font-weight:750; margin:4px 0 7px; }
+    .brief-point { font-size:.78rem; margin:3px 0; color:#334155; }
+    .brief-strategy { background:#eef4ff; color:#234584; border-radius:8px; padding:7px 9px; font-size:.78rem; }
+    .footer-note { color:#738198; font-size:.67rem; text-align:right; margin-top:3px; }
+    .stDataFrame { border-radius:10px; overflow:hidden; }
+    div.stButton > button, div.stLinkButton > a { min-height:2rem; padding:.25rem .55rem; font-size:.76rem; }
+    div[data-testid="stAlert"] { padding:.55rem .7rem; font-size:.78rem; }
+    hr { margin:.35rem 0 !important; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 for key, default in {"dart": empty_dart(), "news": [], "ai": {}, "selected": None, "updated": None}.items():
     if key not in st.session_state:
         st.session_state[key] = default
 
-st.sidebar.title("🔋 SAIMS")
+st.sidebar.title("🔋 SAIMS CONTROL")
+st.sidebar.caption("Battery & Materials Intelligence")
 companies = st.sidebar.multiselect("모니터링 풀", COMPANIES, default=COMPANIES)
 sentiment_filter = st.sidebar.selectbox("감성 필터", ["전체", "🔴 주의", "🟢 기회", "🟡 중립"])
 if st.sidebar.button("🔄 실시간 데이터 갱신", type="primary", use_container_width=True):
@@ -216,51 +270,79 @@ for item in st.session_state.news:
     if sentiment_filter == "전체" or item["ai"]["sentiment"] == {"🔴 주의": "주의", "🟢 기회": "기회", "🟡 중립": "중립"}.get(sentiment_filter):
         news_items.append(item)
 
-st.title("🔋 SAIMS 경영기획 인텔리전스")
+updated_text = st.session_state.updated or "미수집"
+st.markdown(
+    f"""
+    <div class="saims-header">
+      <div>
+        <div class="saims-brand">SAIMS 경영기획 인텔리전스</div>
+        <div class="saims-sub">SECONDARY BATTERY · MATERIALS · DISCLOSURE · NEWS</div>
+      </div>
+      <div class="saims-live"><span class="live-dot">●</span> LIVE &nbsp;|&nbsp; {updated_text}</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 today = datetime.now().strftime("%Y-%m-%d")
 today_count = int(st.session_state.dart["rcept_dt"].str.startswith(today).sum()) if not st.session_state.dart.empty else 0
 high_count = sum(x["ai"]["priority"] == "HIGH" or x["ai"]["sentiment"] == "주의" for x in news_items)
 opportunity_count = sum(x["ai"]["sentiment"] == "기회" for x in news_items)
-k1, k2, k3 = st.columns(3)
+k1, k2, k3, k4 = st.columns(4)
 k1.metric("오늘 수집 공시", today_count)
 k2.metric("긴급 주의(High Risk)", high_count)
 k3.metric("수주 기회(Opportunity)", opportunity_count)
+k4.metric("수집 뉴스", len(news_items))
 
-left, right = st.columns(2)
+left, right = st.columns([1.05, 1.35], gap="medium")
 with left:
-    st.subheader("📋 실시간 DART 전자공시")
-    if st.session_state.dart.empty:
-        st.info("조회된 공시가 없습니다.")
-    else:
-        display = st.session_state.dart.rename(columns={"rcept_dt": "접수일자", "corp_name": "기업명", "report_nm": "보고서명", "rcept_no": "접수번호"})
-        st.dataframe(display[["접수일자", "기업명", "보고서명", "접수번호"]], use_container_width=True, hide_index=True, height=300)
-        idx = st.selectbox("상세 분석 대상 선택", range(len(st.session_state.dart)), format_func=lambda i: f"{st.session_state.dart.iloc[i]['corp_name']} | {st.session_state.dart.iloc[i]['report_nm']}")
-        row = st.session_state.dart.iloc[idx]
-        dart_key = f"dart::{row['rcept_no']}"
-        if st.button("🧠 선택 공시 AI 분석", use_container_width=True):
-            st.session_state.ai[dart_key] = analyze_content_with_llm(row["report_nm"], f"기업명: {row['corp_name']}\n접수일자: {row['rcept_dt']}\n접수번호: {row['rcept_no']}", "고객사" if row["corp_name"] in CUSTOMERS else "경쟁사")
-            st.session_state.selected = dart_key
-        if dart_key in st.session_state.ai:
-            render_ai(st.session_state.ai[dart_key])
-            st.link_button("📄 DART 원문 열기", row["url"], use_container_width=True)
+    with st.container(border=True):
+        st.markdown('<div class="panel-title">📋 실시간 DART 전자공시</div>', unsafe_allow_html=True)
+        if st.session_state.dart.empty:
+            st.info("DART API 키를 설정하면 최근 7일 공시가 이 영역에 표시됩니다.")
+            st.dataframe(
+                pd.DataFrame(columns=["접수일", "기업", "보고서"]),
+                use_container_width=True, hide_index=True, height=190,
+            )
+        else:
+            display = st.session_state.dart.rename(columns={"rcept_dt": "접수일", "corp_name": "기업", "report_nm": "보고서"})
+            st.dataframe(
+                display[["접수일", "기업", "보고서"]], use_container_width=True,
+                hide_index=True, height=190,
+                column_config={"보고서": st.column_config.TextColumn(width="large")},
+            )
+            idx = st.selectbox(
+                "분석 대상 공시", range(len(st.session_state.dart)),
+                format_func=lambda i: f"{st.session_state.dart.iloc[i]['corp_name']} | {st.session_state.dart.iloc[i]['report_nm']}",
+                label_visibility="collapsed",
+            )
+            row = st.session_state.dart.iloc[idx]
+            dart_key = f"dart::{row['rcept_no']}"
+            a, b = st.columns(2)
+            if a.button("🧠 AI 분석", use_container_width=True):
+                st.session_state.ai[dart_key] = analyze_content_with_llm(
+                    row["report_nm"],
+                    f"기업명: {row['corp_name']}\n접수일자: {row['rcept_dt']}\n접수번호: {row['rcept_no']}",
+                    "고객사" if row["corp_name"] in CUSTOMERS else "경쟁사",
+                )
+                st.session_state.selected = dart_key
+                st.rerun()
+            b.link_button("📄 원문", row["url"], use_container_width=True)
 
 with right:
-    st.subheader("📰 실시간 기업 뉴스 피드")
-    if not news_items:
-        st.info("조건에 맞는 뉴스가 없습니다.")
-    for i, item in enumerate(news_items):
-        with st.container(border=True):
-            st.markdown(f"**{badge(item['ai']['sentiment'])} {item['corp_name']}**")
-            st.markdown(f"**{item['title']}**")
-            st.caption(f"{item['source']} · {item['time']}")
-            a, b = st.columns(2)
-            if a.button("AI 분석 보기", key=f"news_{i}", use_container_width=True):
-                st.session_state.selected = item["key"]
-            if item["link"]:
-                b.link_button("원문", item["link"], use_container_width=True)
+    with st.container(border=True):
+        st.markdown('<div class="panel-title">📰 실시간 기업 뉴스 피드</div>', unsafe_allow_html=True)
+        with st.container(height=300, border=False):
+            if not news_items:
+                st.info("조건에 맞는 뉴스가 없습니다.")
+            for i, item in enumerate(news_items):
+                c1, c2, c3 = st.columns([1.3, 6.2, 1.25], vertical_alignment="center")
+                c1.markdown(f"**{badge(item['ai']['sentiment'])}**  \n`{item['corp_name']}`")
+                c2.markdown(f"**{item['title']}**  \n<small>{item['source']} · {item['time']}</small>", unsafe_allow_html=True)
+                if c3.button("브리핑", key=f"news_{i}", use_container_width=True):
+                    st.session_state.selected = item["key"]
+                    st.rerun()
+                st.markdown("<hr>", unsafe_allow_html=True)
 
-st.divider()
-st.subheader("🧠 AI 심층 브리핑 & 액션")
 selected = st.session_state.selected
 selected_item = next((x for x in news_items if x["key"] == selected), None)
 if selected_item:
@@ -275,15 +357,45 @@ else:
     selected_title = selected_company = selected_url = ""
     selected_result = None
 
+st.markdown('<div class="panel-title">🧠 AI 심층 브리핑 & 액션</div>', unsafe_allow_html=True)
 if selected_result:
-    st.markdown(f"#### {selected_company} | {selected_title}")
-    render_ai(selected_result)
-    if st.button("🚀 MS Teams 채널로 브리핑 발송", type="primary", use_container_width=True):
-        if send_teams_alert(selected_title, selected_company, selected_result, selected_url):
-            st.success("MS Teams 채널로 브리핑을 발송했습니다.")
-        else:
-            st.error("발송 실패: TEAMS_WEBHOOK_URL 또는 웹훅 권한을 확인하세요.")
+    selected_result = validate_ai(selected_result)
+    brief_left, brief_mid, brief_right = st.columns([2.1, 4.9, 1.35], gap="small")
+    with brief_left:
+        st.markdown(
+            f'<div class="brief-card"><div class="brief-label">Selected intelligence</div>'
+            f'<div class="brief-title">{selected_company}</div>'
+            f'<div class="brief-point">{badge(selected_result["sentiment"])} · {selected_result["priority"]}</div>'
+            f'<div class="brief-point">{selected_title}</div></div>',
+            unsafe_allow_html=True,
+        )
+    with brief_mid:
+        points_html = "".join(f'<div class="brief-point">• {point}</div>' for point in selected_result["summary_points"])
+        st.markdown(
+            f'<div class="brief-card"><div class="brief-label">AI 3-line brief</div>{points_html}'
+            f'<div class="brief-strategy">전략 제언 · {selected_result["strategic_implication"]}</div></div>',
+            unsafe_allow_html=True,
+        )
+    with brief_right:
+        with st.container(border=True):
+            st.caption("EXECUTIVE ACTION")
+            if selected_url:
+                st.link_button("📄 원문 열기", selected_url, use_container_width=True)
+            if st.button("🚀 Teams 발송", type="primary", use_container_width=True):
+                if send_teams_alert(selected_title, selected_company, selected_result, selected_url):
+                    st.success("발송 완료")
+                else:
+                    st.error("웹훅 설정 필요")
 else:
-    st.info("공시를 분석하거나 뉴스의 'AI 분석 보기'를 선택하세요.")
+    st.markdown(
+        '<div class="brief-card"><div class="brief-label">Executive briefing</div>'
+        '<div class="brief-title">뉴스의 ‘브리핑’ 또는 공시의 ‘AI 분석’을 선택하세요.</div>'
+        '<div class="brief-point">선택한 인텔리전스의 핵심 사실 3개, 리스크/기회 등급, 경영진 전략 제언이 이 영역에 표시됩니다.</div>'
+        '<div class="brief-strategy">OPENAI_API_KEY가 없으면 안전한 기본 분석 결과로 표시됩니다.</div></div>',
+        unsafe_allow_html=True,
+    )
 
-st.caption(f"최근 갱신: {st.session_state.updated or '미수집'}")
+st.markdown(
+    f'<div class="footer-note">SAIMS v1.0 · 모니터링 {len(companies)}개사 · 마지막 갱신 {updated_text}</div>',
+    unsafe_allow_html=True,
+)
