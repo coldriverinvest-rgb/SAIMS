@@ -915,18 +915,22 @@ with right:
             if not news_items:
                 st.info("조건에 맞는 뉴스가 없습니다.")
             for i, item in enumerate(news_items):
-                c1, c2, c3 = st.columns([1.3, 6.2, 1.25], vertical_alignment="center")
+                c1, c2, c3 = st.columns([1.25, 5.65, 2.2], vertical_alignment="center")
                 c1.markdown(f"**{badge(item['ai']['sentiment'])}**  \n`{item['corp_name']}`")
                 c2.markdown(f"**{item['title']}**  \n<small>{item['source']} · {item['time']}</small>", unsafe_allow_html=True)
-                if c3.button("브리핑", key=f"news_{i}", width="stretch"):
-                    with st.spinner("Gemini가 심층 분석 중입니다..."):
-                        st.session_state.ai[item["key"]] = analyze_content_with_llm(
-                            item["title"],
-                            item["summary"],
-                            item["group_type"],
-                        )
-                    st.session_state.selected = item["key"]
-                    st.rerun()
+                with c3:
+                    original_col, brief_col = st.columns(2, gap="small")
+                    if item.get("link"):
+                        original_col.link_button("↗ 원문", item["link"], width="stretch")
+                    if brief_col.button("브리핑", key=f"news_{i}", width="stretch"):
+                        with st.spinner("Gemini가 심층 분석 중입니다..."):
+                            st.session_state.ai[item["key"]] = analyze_content_with_llm(
+                                item["title"],
+                                item["summary"],
+                                item["group_type"],
+                            )
+                        st.session_state.selected = item["key"]
+                        st.rerun()
                 st.markdown("<hr>", unsafe_allow_html=True)
 
 selected = st.session_state.selected
