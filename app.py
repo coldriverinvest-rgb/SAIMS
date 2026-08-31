@@ -536,10 +536,25 @@ st.markdown(
     }
     [data-testid="stHeader"] {
         height:0 !important; min-height:0 !important; background:transparent !important;
+        overflow:visible !important; pointer-events:none !important;
     }
     [data-testid="stToolbar"], [data-testid="stDecoration"],
     [data-testid="stStatusWidget"], .stAppDeployButton, #MainMenu {
         display:none !important;
+    }
+    [data-testid="stExpandSidebarButton"] {
+        display:flex !important; position:fixed !important; top:10px !important; left:10px !important;
+        z-index:999999 !important; pointer-events:auto !important;
+    }
+    [data-testid="stExpandSidebarButton"] button {
+        width:38px !important; height:38px !important; border-radius:11px !important;
+        color:#fff !important; background:linear-gradient(145deg,#1f5edc,#29a9c1) !important;
+        border:1px solid rgba(255,255,255,.32) !important;
+        box-shadow:0 8px 22px rgba(18,61,139,.30) !important;
+    }
+    [data-testid="stSidebarCollapseButton"] button {
+        color:#dce8fb !important; border-radius:8px !important;
+        background:rgba(255,255,255,.07) !important;
     }
     html, body, [class*="css"] { font-family:"Pretendard","Inter","Segoe UI",sans-serif; }
     .stApp {
