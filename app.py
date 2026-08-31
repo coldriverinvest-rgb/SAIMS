@@ -13,19 +13,22 @@ import streamlit as st
 from dotenv import load_dotenv
 from openai import OpenAI
 
-load_dotenv()
-DART_API_KEY = os.getenv("DART_API_KEY", "")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+from backend.config import (
+    COMPANIES,
+    COMPETITORS,
+    CUSTOMERS,
+    DART_API_KEY,
+    DART_COLUMNS,
+    GEMINI_API_KEY,
+    GEMINI_MODEL,
+    OPENAI_API_KEY,
+    OWN_COMPANIES,
+    TELEGRAM_BOT_TOKEN,
+    TELEGRAM_CHAT_ID,
+)
+from frontend.components import badge, quick_classify_news, render_ai, render_dart_link_table
 
-OWN_COMPANIES = ["포스코퓨처엠"]
-COMPETITORS = ["포스코홀딩스", "LG화학", "에코프로비엠", "엘앤에프"]
-CUSTOMERS = ["LG에너지솔루션", "삼성SDI", "SK온", "현대차"]
-COMPANIES = OWN_COMPANIES + COMPETITORS + CUSTOMERS
-DART_COLUMNS = ["rcept_dt", "corp_name", "report_nm", "rcept_no", "url"]
+load_dotenv()
 
 
 def empty_dart() -> pd.DataFrame:
@@ -391,64 +394,6 @@ def send_telegram_alert(title: str, corp_name: str, ai_result: dict, source_url:
         return bool(response.json().get("ok"))
     except Exception:
         return False
-
-
-def badge(sentiment: str) -> str:
-    return {"주의": "🔴 주의", "기회": "🟢 기회", "중립": "🟡 중립"}.get(sentiment, "🟡 중립")
-
-
-def render_dart_link_table(dart_df: pd.DataFrame) -> None:
-    rows = []
-    for _, disclosure in dart_df.iterrows():
-        receipt_date = html.escape(text(disclosure.get("rcept_dt")))
-        company = html.escape(text(disclosure.get("corp_name")))
-        report_name = html.escape(text(disclosure.get("report_nm")))
-        source_url = html.escape(text(disclosure.get("url")), quote=True)
-        report_cell = (
-            f'<a href="{source_url}" target="_blank" rel="noopener noreferrer" '
-            f'title="DART 원문 열기">{report_name}</a>'
-            if source_url
-            else report_name
-        )
-        rows.append(
-            f"<tr><td>{receipt_date}</td><td>{company}</td><td>{report_cell}</td></tr>"
-        )
-    st.markdown(
-        '<div class="dart-table-wrap"><table class="dart-table">'
-        '<thead><tr><th>접수일</th><th>기업</th><th>보고서</th></tr></thead>'
-        f'<tbody>{"".join(rows)}</tbody></table></div>',
-        unsafe_allow_html=True,
-    )
-
-
-def quick_classify_news(item: dict) -> dict:
-    content = f"{item.get('title', '')} {item.get('summary', '')}".lower()
-    caution_words = ["증설", "capex", "특허", "점유율", "경쟁", "하향", "적자", "감축", "매각"]
-    opportunity_words = ["수주", "공급계약", "협력", "공급망", "신규 공급", "파트너십", "양산"]
-    if any(word in content for word in caution_words):
-        sentiment, priority = "주의", "MID"
-    elif any(word in content for word in opportunity_words):
-        sentiment, priority = "기회", "MID"
-    else:
-        sentiment, priority = "중립", "LOW"
-    return {
-        "summary_points": [
-            item.get("title", "뉴스 제목 확인 필요"),
-            f"출처: {item.get('source', '출처 미상')}",
-            "브리핑을 선택하면 Gemini가 심층 분석합니다.",
-        ],
-        "sentiment": sentiment,
-        "priority": priority,
-        "strategic_implication": "Gemini 심층 분석 대기 중입니다.",
-    }
-
-
-def render_ai(result: dict):
-    result = validate_ai(result)
-    st.markdown(f"**{badge(result['sentiment'])} · {result['priority']}**")
-    for point in result["summary_points"]:
-        st.markdown(f"- {point}")
-    st.info(f"전략 시사점: {result['strategic_implication']}")
 
 
 st.set_page_config(
