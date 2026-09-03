@@ -1,7 +1,9 @@
-streamlit>=1.36.0
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
 OpenDartReader==0.2.2
 feedparser>=6.0.11
 openai>=1.40.0
 requests>=2.32.0
 python-dotenv>=1.0.1
 pandas>=2.2.2
+langsmith>=0.4.0

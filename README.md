@@ -1,91 +1,98 @@
 # FUTURE:M RADAR
 
-POSCO퓨처엠을 중심으로 경쟁사·고객사의 공시, 뉴스, 재무정보를 모니터링하고 AI 브리핑을 제공하는 Streamlit 대시보드입니다.
+POSCO퓨처엠을 중심으로 경쟁사·고객사의 공시, 뉴스, 재무정보를 모니터링하고 AI 브리핑을 제공하는 분리형 웹 애플리케이션입니다.
 
-## 주요 기능
+## 기술 구조
 
-- OpenDART 최근 공시 조회 및 원문 링크
-- Google News RSS 기반 기업 뉴스 모니터링
-- Gemini/OpenAI 기반 뉴스·공시 분석
-- 기업별 재무 건전성·수익성 분석
-- 모니터링 기업 추가 및 감성 필터
-- Telegram 브리핑 발송
-- 한 화면에서 확인 가능한 대시보드 UI
-
-## 프로젝트 구조
+- Frontend: React, Vite, Lucide React
+- Backend: FastAPI, OpenDartReader, feedparser, Gemini/OpenAI, pandas
+- Frontend: `http://localhost:5173`
+- Backend API: `http://localhost:8001`
+- API 문서: `http://localhost:8001/docs`
 
 ```text
-SAIMS/
-├─ app.py                    # Streamlit 실행 진입점
-├─ backend/
-│  ├─ __init__.py
-│  └─ config.py              # API 환경변수 및 기본 기업 목록
+FUTURE_M_RADAR/
 ├─ frontend/
-│  ├─ __init__.py
-│  └─ components.py          # 화면용 재사용 컴포넌트
-├─ .env.example              # 환경변수 예시
-├─ requirements.txt          # Python 패키지 목록
-└─ PRD.md                    # 제품 요구사항 문서
+│  ├─ src/
+│  │  ├─ App.jsx          # 화면 및 사용자 흐름
+│  │  ├─ api.js           # 백엔드 API 연결
+│  │  └─ styles.css       # 디자인 시스템
+│  ├─ package.json
+│  └─ vite.config.js
+├─ backend/
+│  ├─ services/
+│  │  ├─ dart_service.py
+│  │  ├─ news_service.py
+│  │  ├─ finance_service.py
+│  │  ├─ ai_service.py
+│  │  └─ telegram_service.py
+│  ├─ config.py
+│  ├─ schemas.py
+│  └─ main.py             # FastAPI 진입점
+├─ .env
+├─ .env.example
+└─ requirements.txt
 ```
 
 ## 설치
 
-Python 3.10 이상을 권장합니다.
-
-```bash
-python -m venv .venv
-```
-
-Windows PowerShell:
+Backend:
 
 ```powershell
+python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-## 환경변수 설정
-
-`.env.example`을 복사하여 `.env`를 만들고 실제 키를 입력합니다.
+Frontend:
 
 ```powershell
-Copy-Item .env.example .env
+cd frontend
+npm install
 ```
 
-필수·선택 환경변수:
+## 환경변수
+
+`.env.example`을 `.env`로 복사한 뒤 API 키를 입력합니다.
 
 ```env
-DART_API_KEY=OpenDART_API_KEY
-GEMINI_API_KEY=Gemini_API_KEY
+DART_API_KEY=
+GEMINI_API_KEY=
 GEMINI_MODEL=gemini-flash-lite-latest
-OPENAI_API_KEY=OpenAI_API_KEY
-TELEGRAM_BOT_TOKEN=Telegram_Bot_Token
-TELEGRAM_CHAT_ID=Telegram_Chat_ID
+OPENAI_API_KEY=
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+LANGSMITH_API_KEY=
+LANGSMITH_PROJECT=FUTURE-M-RADAR
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
 ```
 
-`.env` 파일은 Git에 커밋하지 않습니다.
+`LANGSMITH_API_KEY`를 입력하면 AI 분석 요청·응답, 실행시간 및 오류가
+`FUTURE-M-RADAR` 프로젝트에 자동으로 기록됩니다. 키가 비어 있으면 추적은
+자동으로 비활성화됩니다.
 
 ## 실행
 
+터미널 1 — Backend:
+
 ```powershell
-.\.venv\Scripts\python.exe -m streamlit run app.py
+.\.venv\Scripts\python.exe -m uvicorn backend.main:app --reload --port 8001
 ```
 
-브라우저에서 다음 주소를 엽니다.
+터미널 2 — Frontend:
 
-```text
-http://localhost:8501
+```powershell
+cd frontend
+npm run dev
 ```
 
-## 사용 순서
+브라우저에서 `http://localhost:5173`을 엽니다.
 
-1. 사이드바에서 모니터링 기업을 확인하거나 상장기업을 추가합니다.
-2. `실시간 데이터 갱신`을 클릭합니다.
-3. DART 공시 또는 뉴스 원문을 선택합니다.
-4. AI 분석 결과와 전략 시사점을 확인합니다.
-5. 필요한 경우 Telegram으로 브리핑을 발송합니다.
+## 빌드
 
-## 주의사항
+```powershell
+cd frontend
+npm run build
+```
 
-- DART 기업명이 OpenDART 등록명과 다르면 공시가 조회되지 않을 수 있습니다.
-- Gemini·OpenAI·Telegram 기능은 해당 API 키와 설정이 있을 때 활성화됩니다.
-- API 호출 결과가 없거나 오류가 발생하면 대시보드는 빈 결과 또는 안내 메시지를 표시합니다.
+빌드 결과는 `frontend/dist`에 생성됩니다.

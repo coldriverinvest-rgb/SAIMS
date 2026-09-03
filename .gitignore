@@ -1,7 +1,13 @@
+# Local secrets: never commit API keys or tokens.
 .env
+.env.*
+!.env.example
 .venv/
 __pycache__/
 *.pyc
 *.log
 .streamlit/secrets.toml
 docs_cache/
+frontend/node_modules/
+frontend/dist/
+.vite/
