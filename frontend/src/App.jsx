@@ -12,13 +12,14 @@ import {
   Newspaper,
   Plus,
   RefreshCw,
-  Send,
   Sparkles,
   Tag,
   TrendingUp,
   X,
 } from "lucide-react";
 import { api } from "./api";
+import IntelligenceScores from "./IntelligenceScores";
+import MaterialsPage from "./MaterialsPage";
 import {
   Bar,
   CartesianGrid,
@@ -129,6 +130,12 @@ function Sidebar({
               onClick={() => setView("stocks")}
             >
               <TrendingUp /> 주가 분석
+            </button>
+            <button className={view === "scores" ? "active" : ""} onClick={() => setView("scores")}>
+              <Sparkles /> 경쟁사 신호
+            </button>
+            <button className={view === "materials" ? "active" : ""} onClick={() => setView("materials")}>
+              <TrendingUp /> 원자재 가격
             </button>
           </nav>
           <p className="side-label">모니터링 풀</p>
@@ -501,59 +508,6 @@ function AnalysisModal({ item, result, loading, onClose }) {
   );
 }
 
-function Briefing({ selected, selectedCompany, result, onSend, loading }) {
-  return (
-    <section className="briefing">
-      <div className="brief-head">
-        <div>
-          <span>AI DEEP BRIEFING</span>
-          <h2>
-            {selected?.title ||
-              (selectedCompany
-                ? `${selectedCompany} 분석 대상을 선택하세요`
-                : "분석 대상을 선택하세요")}
-          </h2>
-        </div>
-      </div>
-      <div className="brief-body">
-        <div className="brief-status">
-          <span className={`pill ${result.sentiment}`}>{result.sentiment}</span>
-          <strong>{result.priority}</strong>
-          <small>{selected?.corp_name || selectedCompany || "기업 미선택"}</small>
-        </div>
-        <div className="points">
-          {loading ? (
-            <p className="muted">AI가 핵심 영향과 대응 방향을 분석하고 있습니다.</p>
-          ) : result.summary_points.length ? (
-            result.summary_points.map((point, i) => (
-              <p key={i}>
-                <b>0{i + 1}</b>
-                {point}
-              </p>
-            ))
-          ) : (
-            <p className="muted">뉴스 또는 공시의 브리핑 버튼을 선택하세요.</p>
-          )}
-          <div className="strategy">
-            <span>STRATEGIC IMPLICATION</span>
-            {result.strategic_implication}
-          </div>
-        </div>
-        <div className="brief-actions">
-          {selected?.link && (
-            <a href={selected.link} target="_blank" rel="noreferrer">
-              <ExternalLink /> 원문 열기
-            </a>
-          )}
-          <button onClick={onSend} disabled={!selected}>
-            <Send /> Telegram 발송
-          </button>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function FinancialView({ companies, selectedCompany }) {
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
@@ -576,6 +530,7 @@ function FinancialView({ companies, selectedCompany }) {
   const [company, setCompany] = useState(companies[0] || "포스코퓨처엠");
   const [year, setYear] = useState(defaultYear);
   const [reportCode, setReportCode] = useState(defaultReport);
+  const [statementType, setStatementType] = useState("CFS");
   const [activeStatement, setActiveStatement] = useState("income");
   const [data, setData] = useState(null);
   const [history, setHistory] = useState([]);
@@ -591,8 +546,8 @@ function FinancialView({ companies, selectedCompany }) {
     setLoading(true);
     setError("");
     Promise.all([
-      api.financials(company, year, reportCode),
-      api.financialHistory(company, year, reportCode),
+      api.financials(company, year, reportCode, statementType),
+      api.financialHistory(company, year, reportCode, statementType),
     ])
       .then(([current, historical]) => {
         setData(current);
@@ -604,7 +559,7 @@ function FinancialView({ companies, selectedCompany }) {
         setError(requestError.message);
       })
       .finally(() => setLoading(false));
-  }, [company, year, reportCode]);
+  }, [company, year, reportCode, statementType]);
   const metricSets = data
     ? {
         income: [
@@ -636,7 +591,7 @@ function FinancialView({ companies, selectedCompany }) {
         : Number((((value - prior) / Math.abs(prior)) * 100).toFixed(1));
     return {
       ...item,
-      label: `${item.year}/${reportCode === "11011" ? "12" : reportCode === "11014" ? "09" : reportCode === "11012" ? "06" : "03"}`,
+      label: item.quarter_label || `${item.year} Q`,
       revenue_growth: growth(item.revenue, previous?.revenue),
       operating_growth: growth(
         item.operating_income,
@@ -645,7 +600,7 @@ function FinancialView({ companies, selectedCompany }) {
       net_growth: growth(item.net_income, previous?.net_income),
     };
   });
-  const chartData = chartDataWithGrowth.slice(-5);
+  const chartData = chartDataWithGrowth.slice(-8);
   const tabs = [
     { id: "income", label: "포괄손익계산서" },
     { id: "balance", label: "재무상태표" },
@@ -721,6 +676,16 @@ function FinancialView({ companies, selectedCompany }) {
                   {item.label}
                 </option>
               ))}
+            </select>
+          </label>
+          <label>
+            재무제표
+            <select
+              value={statementType}
+              onChange={(event) => setStatementType(event.target.value)}
+            >
+              <option value="CFS">연결재무제표</option>
+              <option value="OFS">별도재무제표</option>
             </select>
           </label>
         </div>
@@ -964,13 +929,13 @@ function FinancialView({ companies, selectedCompany }) {
       {data && (
         <section className="panel finance-detail">
           <h2>
-            <Building2 /> {data.corp_name} 연결 재무제표
+            <Building2 /> {data.corp_name} {data.statement_type} 재무제표
           </h2>
           <p>
             {data.period_label} · OpenDART 기준 · 최근 {chartData.length}개년
             비교
             {data.source_corp_name && data.source_corp_name !== data.corp_name
-              ? ` · ${data.source_corp_name} 연결 기준`
+              ? ` · ${data.source_corp_name} ${data.statement_type} 기준`
               : ""}
           </p>
           {data.source_url && (
@@ -1498,20 +1463,6 @@ export default function App() {
       setBriefingLoading(false);
     }
   };
-  const send = async () => {
-    if (!selected) return;
-    try {
-      await api.telegram({
-        title: selected.title,
-        corp_name: selected.corp_name,
-        ai_result: aiResult,
-        source_url: selected.link || selected.url,
-      });
-      alert("Telegram으로 브리핑을 발송했습니다.");
-    } catch (error) {
-      alert(error.message);
-    }
-  };
   return (
     <div className="app-shell">
       <Sidebar
@@ -1574,13 +1525,6 @@ export default function App() {
                 onSelect={briefNews}
               />
             </div>
-            <Briefing
-              selected={selected}
-              selectedCompany={selectedCompany}
-              result={aiResult}
-              onSend={send}
-              loading={briefingLoading}
-            />
             <AnalysisModal
               item={selected}
               result={aiResult}
@@ -1590,6 +1534,10 @@ export default function App() {
               onClose={() => setSelected(null)}
             />
           </>
+        ) : view === "materials" ? (
+          <MaterialsPage />
+        ) : view === "scores" ? (
+          <IntelligenceScores data={data} companies={companies} selectedCompany={selectedCompany} onSelect={setSelectedCompany} loading={loading} />
         ) : view === "finance" ? (
           <FinancialView
             companies={companies}

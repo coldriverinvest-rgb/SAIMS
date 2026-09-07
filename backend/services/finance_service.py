@@ -24,12 +24,43 @@ def format_ratio(value): return "N/A" if value is None else f"{value:,.1f}%"
 def to_eok(value): return None if value is None else round(value / 100_000_000, 1)
 
 REPORT_LABELS = {"11013": "1분기", "11012": "반기", "11014": "3분기", "11011": "사업보고서(연간)"}
+QUARTERLY_CODES = ("11013", "11012", "11014", "11011")
+QUARTER_LABELS = {"11013": "Q1", "11012": "Q2", "11014": "Q3", "11011": "Q4"}
 CORPORATE_NAME_ALIASES = {
     "현대차": "현대자동차",
     "SK온": "에스케이온",
 }
 
-def fetch_financials(corp_name: str, year: int | None = None, report_code: str | None = None):
+STATEMENT_LABELS = {"CFS": "연결", "OFS": "별도"}
+
+def quarterly_periods(end_year: int, end_report_code: str, count: int = 8) -> list[tuple[int, str]]:
+    end_index = end_year * 4 + QUARTERLY_CODES.index(end_report_code)
+    start_index = end_index - max(1, count) + 1
+    return [(index // 4, QUARTERLY_CODES[index % 4]) for index in range(start_index, end_index + 1)]
+
+def normalize_quarterly_history(items: list[dict]) -> list[dict]:
+    """Convert DART year-to-date income/cashflow values into standalone quarters."""
+    ordered = sorted(items, key=lambda item: (item["year"], QUARTERLY_CODES.index(item["report_code"])))
+    flow_fields = ("revenue", "operating_income", "net_income", "operating_cf", "investing_cf", "financing_cf")
+    cumulative_by_year: dict[int, dict[str, float | None]] = {}
+    result = []
+    for source in ordered:
+        item = dict(source)
+        year, code = item["year"], item["report_code"]
+        previous = cumulative_by_year.setdefault(year, {})
+        for field in flow_fields:
+            cumulative = item.get(field)
+            prior = previous.get(field)
+            if cumulative is not None and prior is not None:
+                item[field] = round(cumulative - prior, 1)
+            previous[field] = cumulative
+        item["operating_margin"] = ratio(item.get("operating_income"), item.get("revenue"))
+        item["net_margin"] = ratio(item.get("net_income"), item.get("revenue"))
+        item["quarter_label"] = f"{year} {QUARTER_LABELS[code]}"
+        result.append(item)
+    return result
+
+def fetch_financials(corp_name: str, year: int | None = None, report_code: str | None = None, fs_div: str = "CFS"):
     if not DART_API_KEY: return {}
     dart_name = CORPORATE_NAME_ALIASES.get(corp_name, corp_name)
     dart=OpenDartReader(DART_API_KEY); statement=None; selected=None; now=datetime.now().year
@@ -39,7 +70,7 @@ def fetch_financials(corp_name: str, year: int | None = None, report_code: str |
         candidates = [(now,"11012","반기"),(now,"11013","1분기"),(now-1,"11011","사업보고서(연간)"),(now-1,"11014","3분기")]
     for target_year,code,label in candidates:
         try:
-            candidate=dart.finstate_all(dart_name,target_year,reprt_code=code,fs_div="CFS")
+            candidate=dart.finstate_all(dart_name,target_year,reprt_code=code,fs_div=fs_div)
             if candidate is not None and not candidate.empty: statement,selected=candidate,(target_year,label,code); break
         except Exception: continue
     if statement is None: return {}
@@ -49,6 +80,8 @@ def fetch_financials(corp_name: str, year: int | None = None, report_code: str |
     receipt=safe_text(statement.iloc[0].get("rcept_no")); debt_ratio=ratio(liabilities,equity); operating_margin=ratio(operating,revenue); net_margin=ratio(net,revenue)
     return {
         "corp_name": corp_name,
+        "fs_div": fs_div,
+        "statement_type": STATEMENT_LABELS[fs_div],
         "source_corp_name": dart_name,
         "year": selected[0],
         "report_code": selected[2],

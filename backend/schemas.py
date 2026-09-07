@@ -21,3 +21,18 @@ class TelegramRequest(BaseModel):
     corp_name: str
     ai_result: AIResult
     source_url: str = ""
+
+class RecipientCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    chat_id: str = Field(default="", max_length=80)
+    email: str = Field(default="", max_length=254)
+    telegram_enabled: bool = True
+    email_enabled: bool = True
+
+class RecipientUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    enabled: bool | None = None
+    chat_id: str | None = Field(default=None, max_length=80)
+    email: str | None = Field(default=None, max_length=254)
+    telegram_enabled: bool | None = None
+    email_enabled: bool | None = None

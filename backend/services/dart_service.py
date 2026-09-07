@@ -3,7 +3,11 @@ import OpenDartReader
 import pandas as pd
 from backend.config import DART_API_KEY, DART_COLUMNS
 
-MAJOR_DISCLOSURE_TERMS = ("단일판매·공급계약체결", "단일판매ㆍ공급계약체결", "신규시설투자", "타법인주식및출자증권취득결정", "유상증자")
+MAJOR_DISCLOSURE_TERMS = (
+    "단일판매·공급계약체결", "단일판매ㆍ공급계약체결", "단일판매·공급계약해지", "단일판매ㆍ공급계약해지",
+    "신규시설투자", "타법인주식및출자증권취득결정", "유상증자", "영업양수도", "유형자산취득",
+    "타인에대한채무보증결정", "소송등의제기", "연결재무제표기준영업(잠정)실적",
+)
 CORPORATE_NAME_ALIASES = {"SK온": "에스케이온"}
 
 def safe_text(value, default="") -> str:

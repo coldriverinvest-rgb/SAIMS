@@ -1,0 +1,75 @@
+/* Use the space released by the removed inline briefing while keeping each
+   intelligence feed independently scrollable. */
+.dual-grid .table-scroll,
+.dual-grid .news-scroll {
+  height: clamp(420px, calc(100vh - 412px), 680px);
+}
+
+@media (max-width: 1200px) {
+  .dual-grid .table-scroll,
+  .dual-grid .news-scroll {
+    height: clamp(300px, calc(100vh - 412px), 420px);
+  }
+}
+
+/* Unified typography for the two intelligence feeds. */
+.dual-grid .panel-heading h2 {
+  font-size: 14px;
+}
+
+.dual-grid .panel-heading > span {
+  font-size: 10px;
+}
+
+.dual-grid table {
+  font-size: 11px;
+}
+
+.dual-grid th {
+  padding: 10px 11px;
+  font-size: 10px;
+}
+
+.dual-grid td {
+  padding: 10px 11px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.dual-grid .text-button {
+  font-size: 10px;
+}
+
+.dual-grid .news-row {
+  min-height: 82px;
+  padding: 12px 14px;
+  grid-template-columns: 96px minmax(0, 1fr) 126px;
+}
+
+.dual-grid .strategy-tag,
+.dual-grid .sentiment {
+  font-size: 11px;
+}
+
+.dual-grid .strategy-tag small,
+.dual-grid .sentiment small {
+  font-size: 10px;
+}
+
+.dual-grid .news-copy strong {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.dual-grid .news-copy small {
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.dual-grid .row-actions a,
+.dual-grid .row-actions button {
+  min-width: 52px;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 10px;
+}

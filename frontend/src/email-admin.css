@@ -1,0 +1,9 @@
+.admin-stats{grid-template-columns:repeat(4,1fr)}
+.channel-toggles{display:flex;gap:6px;margin-top:6px}
+.channel-toggles button{padding:4px 7px;border:1px solid #cfdbe8;border-radius:999px;background:#f4f7fa;color:#778a9e;font-size:9px;cursor:pointer}
+.channel-toggles button.on{border-color:#9edbce;background:#e9f9f5;color:#167b68}
+.new-channel-options{display:flex;gap:16px;padding:5px 0}
+.admin-side-panel form .new-channel-options label{display:flex;align-items:center;gap:6px;color:#4c6681}
+.admin-side-panel form .new-channel-options input{width:15px;height:15px;padding:0;accent-color:#24a998}
+@media(max-width:1100px){.admin-stats{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:700px){.admin-stats{grid-template-columns:1fr}}
