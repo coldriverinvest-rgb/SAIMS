@@ -22,7 +22,9 @@ import IntelligenceScores from "./IntelligenceScores";
 import MaterialsPage from "./MaterialsPage";
 import {
   Bar,
+  Brush,
   CartesianGrid,
+  Cell,
   ComposedChart,
   LabelList,
   Legend,
@@ -1300,6 +1302,7 @@ function StockView({ companies, selectedCompany }) {
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [marketOpen, setMarketOpen] = useState(isKoreanMarketOpen);
+  const [chartMode, setChartMode] = useState("absolute");
   const periods = [
     ["1m", "1개월"],
     ["3m", "3개월"],
@@ -1315,6 +1318,12 @@ function StockView({ companies, selectedCompany }) {
     if (value >= 1000000) return `${(value / 1000000).toFixed(1)}백만주`;
     if (value >= 10000) return `${(value / 10000).toFixed(1)}만주`;
     return `${Number(value).toLocaleString("ko-KR")}주`;
+  };
+  const changeSummary = (day, week, suffix = "%") => {
+    const format = (value) => value == null
+      ? "-"
+      : `${value > 0 ? "+" : ""}${Number(value).toFixed(2)}${suffix}`;
+    return `전일 ${format(day)} · 전주 ${format(week)}`;
   };
   useEffect(() => {
     if (selectedCompany && companies.includes(selectedCompany)) {
@@ -1345,14 +1354,44 @@ function StockView({ companies, selectedCompany }) {
     }, 60000);
     return () => window.clearInterval(timer);
   }, []);
+  const relativeChart = useMemo(() => {
+    const rows = data?.chart || [];
+    if (!rows.length) return [];
+    const first = rows[0];
+    return rows.map((row) => {
+      const peerReturns = (row.peer_prices || []).map((value, index) => {
+        const base = first.peer_prices?.[index];
+        return base ? (value / base - 1) * 100 : null;
+      }).filter((value) => value != null);
+      return {
+        ...row,
+        company_return: first.close ? (row.close / first.close - 1) * 100 : null,
+        kospi_return: first.kospi && row.kospi ? (row.kospi / first.kospi - 1) * 100 : null,
+        peer_return: peerReturns.length ? peerReturns.reduce((sum, value) => sum + value, 0) / peerReturns.length : null,
+      };
+    });
+  }, [data]);
+  const StockPriceTooltip = ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null;
+    const row = payload[0].payload;
+    const items = [
+      ["종가", won(row.close)],
+      ["등락률", percent(row.change_rate)],
+      ["거래량", compactVolume(row.volume)],
+      ["20일선", won(row.ma20)],
+      ["60일선", won(row.ma60)],
+      ["120일선", won(row.ma120)],
+    ];
+    return <div className="stock-tooltip"><strong>{label}</strong><table><tbody>{items.map(([name, value]) => <tr key={name}><th>{name}</th><td>{value}</td></tr>)}</tbody></table></div>;
+  };
   const metrics = data?.listed
     ? [
-        ["현재가", won(data.price), percent(data.change_rate)],
-        ["52주 고가", won(data.high_52w), "연중 가격 상단"],
-        ["52주 저가", won(data.low_52w), "연중 가격 하단"],
-        ["거래량", compactVolume(data.volume), `20일 평균 ${compactVolume(data.average_volume_20d)}`],
-        ["RSI(14)", data.rsi14 == null ? "-" : data.rsi14.toFixed(1), "70 과열 · 30 침체"],
-        ["연환산 변동성", data.volatility == null ? "-" : `${data.volatility.toFixed(1)}%`, "최근 1년 일간 수익률"],
+        ["현재가", won(data.price), changeSummary(data.day_change_rate, data.week_change_rate), data.day_change_rate],
+        ["52주 고가", won(data.high_52w), `현재가 대비 ${percent((data.price / data.high_52w - 1) * 100)} · 전주 ${percent(data.week_change_rate)}`, data.week_change_rate],
+        ["52주 저가", won(data.low_52w), `저점 대비 ${percent((data.price / data.low_52w - 1) * 100)} · 전주 ${percent(data.week_change_rate)}`, data.week_change_rate],
+        ["거래량", compactVolume(data.volume), changeSummary(data.volume_day_change_rate, data.volume_week_change_rate), data.volume_day_change_rate],
+        ["시가총액", data.market_cap_trillion == null ? "-" : `${Number(data.market_cap_trillion).toFixed(2)}조원`, changeSummary(data.day_change_rate, data.week_change_rate), data.day_change_rate],
+        ["외국인 지분율", data.foreign_rate == null ? "-" : `${Number(data.foreign_rate).toFixed(2)}%`, changeSummary(data.foreign_day_change_pp, data.foreign_week_change_pp, "%p"), data.foreign_day_change_pp],
       ]
     : [];
   return (
@@ -1417,11 +1456,11 @@ function StockView({ companies, selectedCompany }) {
       ) : data?.listed ? (
         <>
           <section className="stock-metrics">
-            {metrics.map(([label, value, detail]) => (
+            {metrics.map(([label, value, detail, direction]) => (
               <article key={label}>
                 <span>{label}</span>
                 <strong>{value}</strong>
-                <small className={label === "현재가" && data.change_rate < 0 ? "down" : ""}>{detail}</small>
+                <small className={`${label === "현재가" ? "primary-change" : ""} ${direction < 0 ? "down" : direction > 0 ? "up" : ""}`}>{detail}</small>
               </article>
             ))}
           </section>
@@ -1432,22 +1471,50 @@ function StockView({ companies, selectedCompany }) {
                   <span>{data.stock_code}</span>
                   <h3>{data.corp_name} 주가 추이</h3>
                 </div>
-                <small>{data.as_of} 종가 기준</small>
+                <div className="stock-chart-actions">
+                  <div className="stock-chart-mode" aria-label="차트 표시 방식">
+                    <button className={chartMode === "absolute" ? "active" : ""} onClick={() => setChartMode("absolute")}>절대 주가(원)</button>
+                    <button className={chartMode === "relative" ? "active" : ""} onClick={() => setChartMode("relative")}>상대 수익률(%)</button>
+                  </div>
+                  <small>{data.as_of} 종가 기준</small>
+                </div>
               </div>
               <div className="stock-chart-frame">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={data.chart} margin={{ top: 16, right: 18, bottom: 4, left: 6 }}>
-                    <CartesianGrid stroke="#e5ebf3" vertical={false} />
-                    <XAxis dataKey="date" tick={{ fontSize: 9, fill: "#718198" }} minTickGap={35} />
-                    <YAxis tick={{ fontSize: 9, fill: "#718198" }} width={58} domain={["auto", "auto"]} tickFormatter={(value) => Number(value).toLocaleString("ko-KR")} />
-                    <Tooltip formatter={(value, name) => [won(value), name]} contentStyle={{ fontSize: 10, borderRadius: 9, borderColor: "#d7e0ec" }} />
-                    <Legend wrapperStyle={{ fontSize: 9 }} />
-                    <Line type="monotone" dataKey="close" name="종가" stroke="#2475e8" strokeWidth={2.4} dot={false} />
-                    <Line type="monotone" dataKey="ma20" name="20일선" stroke="#34bfa3" strokeWidth={1.4} dot={false} connectNulls />
-                    <Line type="monotone" dataKey="ma60" name="60일선" stroke="#f09a43" strokeWidth={1.4} dot={false} connectNulls />
-                    <Line type="monotone" dataKey="ma120" name="120일선" stroke="#8c70d9" strokeWidth={1.2} dot={false} connectNulls />
-                  </ComposedChart>
-                </ResponsiveContainer>
+                <div className="stock-price-chart">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart syncId="stock-price-volume" data={relativeChart} margin={{ top: 14, right: 18, bottom: 0, left: 6 }}>
+                      <CartesianGrid stroke="#e5ebf3" vertical={false} />
+                      <XAxis dataKey="date" hide />
+                      <YAxis tick={{ fontSize: 9, fill: "#718198" }} width={58} domain={["auto", "auto"]} tickFormatter={(value) => chartMode === "relative" ? `${Number(value).toFixed(0)}%` : Number(value).toLocaleString("ko-KR")} />
+                      <Tooltip content={<StockPriceTooltip />} />
+                      <Legend wrapperStyle={{ fontSize: 9 }} />
+                      {chartMode === "absolute" ? <>
+                        <Line type="linear" dataKey="close" name="종가" stroke="#2475e8" strokeWidth={2.4} dot={false} />
+                        <Line type="linear" dataKey="ma20" name="20일선" stroke="#34bfa3" strokeWidth={1.4} dot={false} connectNulls />
+                        <Line type="linear" dataKey="ma60" name="60일선" stroke="#f09a43" strokeWidth={1.4} dot={false} connectNulls />
+                        <Line type="linear" dataKey="ma120" name="120일선" stroke="#8c70d9" strokeWidth={1.2} dot={false} connectNulls />
+                      </> : <>
+                        <ReferenceLine y={0} stroke="#9ba9ba" strokeDasharray="4 4" />
+                        <Line type="linear" dataKey="company_return" name={data.corp_name} stroke="#2475e8" strokeWidth={2.5} dot={false} />
+                        <Line type="linear" dataKey="kospi_return" name="KOSPI" stroke="#6b7d92" strokeWidth={1.6} strokeDasharray="6 4" dot={false} connectNulls />
+                        <Line type="linear" dataKey="peer_return" name="피어 평균" stroke="#ef8d3c" strokeWidth={1.6} strokeDasharray="3 4" dot={false} connectNulls />
+                      </>}
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="stock-volume-chart">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart syncId="stock-price-volume" data={relativeChart} margin={{ top: 2, right: 18, bottom: 2, left: 6 }}>
+                      <CartesianGrid stroke="#edf1f6" vertical={false} />
+                      <XAxis dataKey="date" tick={{ fontSize: 8, fill: "#718198" }} minTickGap={35} />
+                      <YAxis tick={{ fontSize: 8, fill: "#718198" }} width={58} tickFormatter={(value) => value >= 1000000 ? `${(value / 1000000).toFixed(0)}M` : `${(value / 1000).toFixed(0)}K`} />
+                      <Bar dataKey="volume" name="거래량" barSize={4}>
+                        {relativeChart.map((row) => <Cell key={row.date} fill={row.change_rate >= 0 ? "#e05252" : "#2475e8"} opacity={0.72} />)}
+                      </Bar>
+                      <Brush dataKey="date" height={14} travellerWidth={7} stroke="#9bb5d8" fill="#f6f9fd" />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </article>
             <aside className="stock-insights">
