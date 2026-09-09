@@ -85,7 +85,9 @@ def fetch_stock_analysis(corp_name: str, period: str = "1y") -> dict:
     try:
         response = requests.get(
             "https://fchart.stock.naver.com/sise.nhn",
-            params={"symbol": stock_code, "timeframe": "day", "count": 320, "requestType": 0},
+            # Keep at least 120 trading days before the one-year display range so
+            # MA120 is available from the chart's first visible point.
+            params={"symbol": stock_code, "timeframe": "day", "count": 420, "requestType": 0},
             headers={"User-Agent": "Mozilla/5.0 FUTURE-M-RADAR/2.0"},
             timeout=12,
         )

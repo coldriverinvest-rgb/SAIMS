@@ -76,8 +76,11 @@ def fetch_financials(corp_name: str, year: int | None = None, report_code: str |
     if statement is None: return {}
     revenue=pick(statement,["ifrs-full_Revenue","ifrs_Revenue","dart_Revenue"],True); operating=pick(statement,["dart_OperatingIncomeLoss","ifrs-full_ProfitLossFromOperatingActivities"],True); net=pick(statement,["ifrs-full_ProfitLoss","ifrs_ProfitLoss"],True)
     assets=pick(statement,["ifrs-full_Assets","ifrs_Assets"]); liabilities=pick(statement,["ifrs-full_Liabilities","ifrs_Liabilities"]); equity=pick(statement,["ifrs-full_Equity","ifrs_Equity"])
+    short_borrowings=pick(statement,["ifrs-full_ShorttermBorrowings","ifrs_ShorttermBorrowings","dart_ShortTermBorrowings"])
+    long_borrowings=pick(statement,["ifrs-full_LongtermBorrowings","ifrs_LongtermBorrowings","dart_LongTermBorrowings"])
+    borrowings=sum(value for value in (short_borrowings,long_borrowings) if value is not None) if short_borrowings is not None or long_borrowings is not None else None
     operating_cf=pick(statement,["ifrs-full_CashFlowsFromUsedInOperatingActivities","ifrs_CashFlowsFromUsedInOperatingActivities"],True); investing_cf=pick(statement,["ifrs-full_CashFlowsFromUsedInInvestingActivities","ifrs_CashFlowsFromUsedInInvestingActivities"],True); financing_cf=pick(statement,["ifrs-full_CashFlowsFromUsedInFinancingActivities","ifrs_CashFlowsFromUsedInFinancingActivities"],True); cash=pick(statement,["ifrs-full_CashAndCashEquivalents","ifrs_CashAndCashEquivalents"])
-    receipt=safe_text(statement.iloc[0].get("rcept_no")); debt_ratio=ratio(liabilities,equity); operating_margin=ratio(operating,revenue); net_margin=ratio(net,revenue)
+    receipt=safe_text(statement.iloc[0].get("rcept_no")); debt_ratio=ratio(liabilities,equity); borrowing_dependency=ratio(borrowings,assets); operating_margin=ratio(operating,revenue); net_margin=ratio(net,revenue)
     return {
         "corp_name": corp_name,
         "fs_div": fs_div,
@@ -88,13 +91,13 @@ def fetch_financials(corp_name: str, year: int | None = None, report_code: str |
         "report_label": selected[1],
         "period_label": f"{selected[0]}년 {selected[1]}",
         "revenue": to_eok(revenue), "operating_income": to_eok(operating), "net_income": to_eok(net),
-        "assets": to_eok(assets), "liabilities": to_eok(liabilities), "equity": to_eok(equity),
+        "assets": to_eok(assets), "liabilities": to_eok(liabilities), "equity": to_eok(equity), "borrowings": to_eok(borrowings),
         "operating_cf": to_eok(operating_cf), "investing_cf": to_eok(investing_cf),
         "financing_cf": to_eok(financing_cf), "cash": to_eok(cash),
-        "debt_ratio": debt_ratio, "operating_margin": operating_margin, "net_margin": net_margin,
+        "debt_ratio": debt_ratio, "borrowing_dependency": borrowing_dependency, "operating_margin": operating_margin, "net_margin": net_margin,
         "revenue_display": format_krw(revenue), "operating_income_display": format_krw(operating),
         "net_income_display": format_krw(net), "assets_display": format_krw(assets),
-        "liabilities_display": format_krw(liabilities), "equity_display": format_krw(equity),
+        "liabilities_display": format_krw(liabilities), "equity_display": format_krw(equity), "borrowing_dependency_display": format_ratio(borrowing_dependency),
         "operating_cf_display": format_krw(operating_cf), "investing_cf_display": format_krw(investing_cf),
         "financing_cf_display": format_krw(financing_cf), "cash_display": format_krw(cash),
         "debt_ratio_display": format_ratio(debt_ratio), "operating_margin_display": format_ratio(operating_margin),

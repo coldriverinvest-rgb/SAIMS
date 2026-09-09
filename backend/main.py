@@ -13,9 +13,10 @@ from backend.services.ai_service import analyze
 from backend.services.dart_service import fetch_disclosures, validate_company
 from backend.services.disclosure_text_service import fetch_disclosure_text
 from backend.services.finance_service import fetch_financials, normalize_quarterly_history, quarterly_periods
-from backend.services.news_service import fetch_news
+from backend.services.news_service import MATERIAL_NEWS, fetch_material_news, fetch_news
 from backend.services.stock_service import fetch_stock_analysis
 from backend.services.komis_service import material_prices, material_monitor_loop
+from backend.services.market_service import fetch_usd_krw
 from backend.services.recipient_service import add_recipient, delete_recipient, initialize_database, list_recipients, update_recipient
 from backend.services.telegram_service import get_bot_status, get_recent_chats, send_alert
 from backend.services.email_service import get_email_status, send_email_alert
@@ -43,6 +44,18 @@ app.add_middleware(CORSMiddleware,allow_origins=["http://localhost:5173","http:/
 @app.get('/api/materials')
 def materials():
     return material_prices()
+@app.get('/api/materials/news')
+def material_news(material: str = Query(...)):
+    if material not in MATERIAL_NEWS:
+        raise HTTPException(status_code=400, detail="지원하지 않는 원자재입니다.")
+    return {"material": material, "items": fetch_material_news(material)}
+
+@app.get('/api/market/exchange-rate')
+def exchange_rate():
+    result = fetch_usd_krw()
+    if not result:
+        raise HTTPException(status_code=502, detail="원/달러 환율을 불러오지 못했습니다.")
+    return result
 
 def build_daily_briefing(disclosures: list[dict], news: list[dict]) -> list[str]:
     signals = []

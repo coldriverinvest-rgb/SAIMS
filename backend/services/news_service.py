@@ -8,6 +8,29 @@ BATTERY_NEWS_TERMS = (
     "리튬", "니켈", "코발트", "전고체", "lfp", "ncm", "ess", "전기차",
     "battery", "cathode", "anode",
 )
+MATERIAL_NEWS = {
+    "lithium": {"name": "리튬", "terms": ("리튬", "lithium")},
+    "nickel": {"name": "니켈", "terms": ("니켈", "nickel")},
+    "cobalt": {"name": "코발트", "terms": ("코발트", "cobalt")},
+    "manganese": {"name": "망간", "terms": ("망간", "manganese")},
+}
+MINERAL_MARKET_TERMS = (
+    "광물", "광산", "채굴", "매장량", "원광", "정광", "광석", "제련", "정련",
+    "생산량", "감산", "증산", "공급", "재고", "수출", "수입", "가격", "시세",
+    "선물", "현물", "톤", "금속", "원자재", "mining", "mine", "ore", "refining",
+    "production", "supply", "inventory", "export", "import", "price", "commodity",
+)
+MATERIAL_EVENT_ENTITIES = (
+    "catl", "닝더스다이", "시그마리튬", "포스코", "리오틴토", "bHP", "글렌코어",
+    "인도네시아", "중국", "호주", "칠레", "아르헨티나", "브라질", "콩고",
+)
+MATERIAL_EVENT_GROUPS = (
+    ("가동", "재가동", "중단", "지연", "중지", "폐쇄"),
+    ("감산", "증산", "생산량", "생산"),
+    ("수출", "수입", "관세", "규제", "제재"),
+    ("가격", "시세", "급등", "급락", "상승", "하락"),
+    ("인수", "매각", "지분", "투자"),
+)
 
 # 조사·접속어와 회사명은 기사 군집화에 도움이 되지 않아 제거합니다.
 NEWS_STOPWORDS = {
@@ -58,6 +81,28 @@ def deduplicate_news(items: list[dict]) -> list[dict]:
         if not duplicate:
             kept.append(item)
             fingerprints.append((words, themes))
+    return kept
+
+def deduplicate_material_news(items: list[dict]) -> list[dict]:
+    """Collapse syndicated headlines and rewrites describing the same mineral event."""
+    kept = []
+    fingerprints = []
+    for item in items:
+        content = f"{item.get('title', '')} {item.get('summary', '')}".lower()
+        words = _topic_words(item.get("title", ""), item.get("material_name", ""))
+        entities = {entity.lower() for entity in MATERIAL_EVENT_ENTITIES if entity.lower() in content}
+        groups = {index for index, terms in enumerate(MATERIAL_EVENT_GROUPS) if any(term.lower() in content for term in terms)}
+        duplicate = False
+        for existing_words, existing_entities, existing_groups in fingerprints:
+            overlap = len(words & existing_words)
+            similarity = overlap / max(len(words | existing_words), 1)
+            same_named_event = bool(entities & existing_entities) and bool(groups & existing_groups)
+            if same_named_event or (overlap >= 3 and similarity >= 0.34):
+                duplicate = True
+                break
+        if not duplicate:
+            kept.append(item)
+            fingerprints.append((words, entities, groups))
     return kept
 
 def classify(item: dict) -> dict:
@@ -113,3 +158,53 @@ def fetch_news(corp_name: str, max_items: int = 5) -> list[dict]:
                 break
         return deduplicate_news(result)[:max_items]
     except Exception: return []
+
+def fetch_material_news(material: str, max_items: int = 8) -> list[dict]:
+    """Fetch material-specific market news with simple executive signal tags."""
+    target = MATERIAL_NEWS.get(material)
+    if not target:
+        return []
+    try:
+        query = f'({" OR ".join(target["terms"])}) (광물 OR 광산 OR 채굴 OR 제련 OR 생산량 OR 공급 OR 재고 OR 수출 OR 수입 OR 가격 OR 시세 OR 원자재)'
+        response = requests.get(
+            f"https://news.google.com/rss/search?q={quote(query)}&hl=ko&gl=KR&ceid=KR:ko",
+            headers={"User-Agent": "Mozilla/5.0 FUTURE-M-RADAR/2.1"},
+            timeout=8,
+        )
+        response.raise_for_status()
+        result = []
+        for entry in feedparser.parse(response.content).entries[:50]:
+            title = str(entry.get("title") or "제목 없음")
+            source = "출처 미상"
+            if " - " in title:
+                title, source = title.rsplit(" - ", 1)
+            summary = strip_html(str(entry.get("summary") or ""))
+            content = f"{title} {summary}".lower()
+            if not any(term.lower() in content for term in target["terms"]):
+                continue
+            # 배터리 제품·기술 기사 대신 광물 자체의 수급·생산·가격 기사를 남깁니다.
+            if not any(term.lower() in content for term in MINERAL_MARKET_TERMS):
+                continue
+            published = entry.get("published_parsed")
+            time_value = datetime(*published[:6]).strftime("%Y-%m-%d %H:%M") if published else str(entry.get("published") or "시간 미상")
+            if any(word in content for word in ("중단", "감산", "규제", "제재", "차질", "부족")):
+                signal, tone = "공급 리스크", "risk"
+            elif any(word in content for word in ("급등", "상승", "반등", "인상")):
+                signal, tone = "가격 상승", "up"
+            elif any(word in content for word in ("급락", "하락", "약세", "인하")):
+                signal, tone = "가격 하락", "down"
+            elif any(word in content for word in ("수요", "재고", "수입", "수출", "생산량", "광산", "채굴", "제련")):
+                signal, tone = "광물 수급", "demand"
+            else:
+                signal, tone = "시장 동향", "neutral"
+            result.append({
+                "title": title, "source": source, "time": time_value,
+                "link": str(entry.get("link") or ""), "summary": summary,
+                "material": material, "material_name": target["name"],
+                "signal": signal, "tone": tone,
+            })
+            if len(result) >= max(max_items * 5, 30):
+                break
+        return deduplicate_material_news(result)[:max_items]
+    except Exception:
+        return []

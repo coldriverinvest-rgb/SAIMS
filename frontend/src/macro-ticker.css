@@ -1,0 +1,45 @@
+.macro-ticker {
+  display: grid;
+  grid-template-columns: 118px repeat(6, minmax(116px, 1fr)) minmax(170px, 1.3fr);
+  align-items: stretch;
+  min-height: 58px;
+  margin: -8px 16px 14px;
+  position: relative;
+  z-index: 3;
+  overflow-x: auto;
+  border: 1px solid #cfdae8;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, .97);
+  box-shadow: 0 10px 26px rgba(18, 50, 90, .12);
+}
+
+.ticker-label, .ticker-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 13px;
+  white-space: nowrap;
+}
+
+.ticker-label {
+  color: #fff;
+  background: linear-gradient(135deg, #173d70, #196c87);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .12em;
+}
+
+.ticker-item { border-right: 1px solid #e3e9f1; }
+.ticker-item:last-child { border-right: 0; }
+.ticker-item small { color: #74849a; font-size: 9px; font-weight: 700; }
+.ticker-item strong { color: #172b47; font-size: 11px; }
+.ticker-item > span { font-size: 9px; font-weight: 800; }
+.ticker-up { color: #d64555; }
+.ticker-down { color: #2471d6; }
+.ticker-flat { color: #8795a8; }
+.ticker-alert { color: #d65343; }
+.ticker-count { justify-content: center; background: #f6f9fd; }
+
+@media (max-width: 1350px) {
+  .macro-ticker { grid-template-columns: 110px repeat(6, 124px) 170px; }
+}
