@@ -12,6 +12,8 @@ const status = title => /해지|손실|적자|감산|유상증자/.test(title) ?
 
 export function buildCompetitiveSignals(companies, data, now = new Date()) {
   const cutoff = now.getTime() - 30 * 86400000;
+  const currentWeekStart = now.getTime() - 7 * 86400000;
+  const previousWeekStart = now.getTime() - 14 * 86400000;
   const sources = [...(data?.disclosures || []).map(x => ({...x,kind:'DART 공시',title:x.report_nm || '',date:x.rcept_dt,link:x.url})), ...(data?.news || []).map(x => ({...x,kind:'뉴스',title:x.title || '',date:x.time,link:x.link}))];
   return companies.map(company => {
     const seen = new Set();
@@ -23,12 +25,19 @@ export function buildCompetitiveSignals(companies, data, now = new Date()) {
     }).map(item => {
       const signals=signalColumns.filter(column=>column.words.test(item.title)).map(column=>column.key);
       const amount=extractAmount(item.title), risk=signals.includes('risk') ? (/유상증자|계약.?해지|손실|적자/.test(item.title)?'High':'Mid') : 'Low';
-      return {...item,date:asDate(item.date),signals,amount,risk,status:status(item.title)};
+      return {...item,date:asDate(item.date),timestamp:Date.parse(asDate(item.date)),signals,amount,risk,status:status(item.title)};
     });
+    const currentEvidence=evidence.filter(item=>item.timestamp>=currentWeekStart);
+    const previousEvidence=evidence.filter(item=>item.timestamp>=previousWeekStart&&item.timestamp<currentWeekStart);
     const cells=Object.fromEntries(signalColumns.map(column=>{
       const items=evidence.filter(item=>item.signals.includes(column.key));
       const primary=[...items].sort((a,b)=>riskLevel[b.risk]-riskLevel[a.risk])[0];
-      return [column.key,{items,primary,count:items.length}];
+      const currentCount=currentEvidence.filter(item=>item.signals.includes(column.key)).length;
+      const previousCount=previousEvidence.filter(item=>item.signals.includes(column.key)).length;
+      const currentShare=currentEvidence.length?Math.round(currentCount/currentEvidence.length*100):0;
+      const previousShare=previousEvidence.length?Math.round(previousCount/previousEvidence.length*100):0;
+      const deltaPoints=currentEvidence.length&&previousEvidence.length?currentShare-previousShare:null;
+      return [column.key,{items,primary,count:items.length,currentCount,previousCount,deltaPoints}];
     }));
     const classifiedEvidence=evidence.filter(item=>item.signals.length>0);
     const highRiskCount=classifiedEvidence.filter(item=>item.risk==='High').length;

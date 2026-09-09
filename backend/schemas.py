@@ -36,3 +36,44 @@ class RecipientUpdate(BaseModel):
     email: str | None = Field(default=None, max_length=254)
     telegram_enabled: bool | None = None
     email_enabled: bool | None = None
+
+
+class TakeawayItem(BaseModel):
+    point: str
+    source_ids: list[str] = Field(default_factory=list)
+
+
+class SignalAnalysisItem(BaseModel):
+    category: str
+    issue_name: str
+    severity: str
+    impact_analysis: str
+    source_ids: list[str] = Field(default_factory=list)
+
+
+class RecommendedActionItem(BaseModel):
+    priority: Literal["IMMEDIATE", "SHORT_TERM", "MONITORING"]
+    target_department: str
+    action_title: str
+    action_description: str
+    rationales: list[str] = Field(default_factory=list)
+
+
+class ExecutiveBriefingResponse(BaseModel):
+    headline: str
+    market_status: str
+    key_takeaways: list[TakeawayItem] = Field(default_factory=list)
+    signal_analysis: list[SignalAnalysisItem] = Field(default_factory=list)
+    recommended_actions: list[RecommendedActionItem] = Field(default_factory=list)
+
+
+class DeepDiveRequest(BaseModel):
+    signal_id: str
+    signal_title: str
+    raw_content: str
+    question: str
+
+
+class DeepDiveResponse(BaseModel):
+    answer: str
+    citations: list[str] = Field(default_factory=list)

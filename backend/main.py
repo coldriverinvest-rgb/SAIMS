@@ -7,9 +7,9 @@ from datetime import datetime
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from backend.config import ADMIN_PASSWORD, ALERT_POLL_SECONDS, DART_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY
-from backend.schemas import AnalyzeRequest, RecipientCreate, RecipientUpdate, TelegramRequest
+from backend.schemas import AnalyzeRequest, DeepDiveRequest, DeepDiveResponse, ExecutiveBriefingResponse, RecipientCreate, RecipientUpdate, TelegramRequest
 from backend.services.alert_monitor import alert_monitor_loop, scan_important_disclosures
-from backend.services.ai_service import analyze
+from backend.services.ai_service import analyze, deep_dive_signal, generate_executive_briefing, make_source_id
 from backend.services.dart_service import fetch_disclosures, validate_company
 from backend.services.disclosure_text_service import fetch_disclosure_text
 from backend.services.finance_service import fetch_financials, normalize_quarterly_history, quarterly_periods
@@ -166,7 +166,54 @@ def intelligence(companies: str=Query(...,min_length=1)):
             try: (disclosures if jobs[future]=="dart" else news).extend(future.result())
             except Exception: continue
     disclosures.sort(key=lambda x:x.get("rcept_dt",""),reverse=True); news.sort(key=lambda x:x.get("time",""),reverse=True)
+    for index, item in enumerate(disclosures):
+        item["source_id"] = make_source_id({**item, "source_type": "DART"}, index)
+    for index, item in enumerate(news):
+        item["source_id"] = make_source_id({**item, "source_type": "NEWS"}, index)
     return {"disclosures":disclosures,"news":news,"daily_briefing":build_daily_briefing(disclosures,news)}
+
+
+@app.get("/api/intelligence/executive-briefing", response_model=ExecutiveBriefingResponse)
+def executive_briefing(companies: str = Query(default="포스코퓨처엠,에코프로비엠,엘앤에프,LG화학")):
+    company_list = list(dict.fromkeys(name.strip() for name in companies.split(",") if name.strip()))[:12]
+    collected = intelligence(",".join(company_list))
+    raw_sources = []
+    for item in collected["disclosures"][:24]:
+        raw_sources.append({
+            "source_id": item["source_id"], "source_type": "DART", "rcept_no": item.get("rcept_no"),
+            "company": item.get("corp_name"), "title": item.get("report_nm"), "date": item.get("rcept_dt"),
+            "content": item.get("text") or item.get("report_nm") or "", "url": item.get("url"),
+        })
+    for item in collected["news"][:30]:
+        raw_sources.append({
+            "source_id": item["source_id"], "source_type": "NEWS", "company": item.get("corp_name"),
+            "title": item.get("title"), "date": item.get("time"),
+            "content": item.get("summary") or item.get("text") or item.get("title") or "", "url": item.get("link"),
+        })
+    try:
+        for item in material_prices().get("items", []):
+            if item.get("price") is None:
+                continue
+            raw_sources.append({
+                "source_id": make_source_id({"source_type": "KOMIS", "material": item.get("id")}),
+                "source_type": "KOMIS", "material": item.get("id"), "title": f"{item.get('name')} 공개 가격",
+                "date": item.get("date"), "content": f"가격 {item.get('price')} {item.get('unit')}; 전일 대비 {item.get('change_pct')}%",
+                "figures": {"price": item.get("price"), "unit": item.get("unit"), "change_pct": item.get("change_pct")},
+            })
+    except Exception:
+        pass
+    return generate_executive_briefing(raw_sources)
+
+
+@app.post("/api/intelligence/deep-dive", response_model=DeepDiveResponse)
+def intelligence_deep_dive(payload: DeepDiveRequest):
+    if payload.signal_id.startswith("DART-") and len(payload.raw_content.strip()) < 300:
+        rcept_no = payload.signal_id.removeprefix("DART-")
+        disclosure_text = fetch_disclosure_text(rcept_no)
+        if disclosure_text:
+            update = {"raw_content": disclosure_text}
+            payload = payload.model_copy(update=update) if hasattr(payload, "model_copy") else payload.copy(update=update)
+    return deep_dive_signal(payload)
 
 @app.get("/api/companies/validate")
 def company_validate(name: str):

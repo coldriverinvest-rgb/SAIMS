@@ -18,6 +18,8 @@ export const api = {
   materialNews: (material) => request(`/materials/news?material=${encodeURIComponent(material)}`),
   exchangeRate: () => request("/market/exchange-rate"),
   intelligence: (companies) => request(`/intelligence?companies=${encodeURIComponent(companies.join(","))}`),
+  executiveBriefing: (companies) => request(`/intelligence/executive-briefing?companies=${encodeURIComponent(companies.join(","))}`),
+  deepDive: (payload) => request("/intelligence/deep-dive", { method: "POST", body: JSON.stringify(payload) }),
   financials: (company, year, reportCode, statementType) => request(`/financials/${encodeURIComponent(company)}?year=${year}&report_code=${reportCode}&fs_div=${statementType}`),
   // Load one extra quarter so the first visible quarter can also calculate QoQ.
   financialHistory: (company, endYear, reportCode, statementType) => request(`/financials/${encodeURIComponent(company)}/history?end_year=${endYear}&report_code=${reportCode}&fs_div=${statementType}&quarters=9`),
