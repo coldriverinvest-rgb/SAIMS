@@ -630,6 +630,15 @@ function FinancialView({ companies, selectedCompany }) {
     return ((current - previous) / Math.abs(previous)) * 100;
   };
   const balanceMetric = (label, value, key, inverse=false) => ({ label, value, qoq: balanceQoq(key), inverse });
+  const formatCashAmount = (value) => value == null || Number.isNaN(Number(value))
+    ? "N/A"
+    : `${Number(value) < 0 ? "-" : ""}${Math.abs(Number(value)).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}억`;
+  const cashValue = (key) => currentBalance?.[key] ?? data?.[key];
+  const cashDelta = (key) => {
+    const current = currentBalance?.[key], previous = previousBalance?.[key];
+    return current == null || previous == null ? null : current - previous;
+  };
+  const cashMetric = (label, key) => ({ label, value: formatCashAmount(cashValue(key)), qoq: cashDelta(key), qoqType: "amount" });
   // The latest balance-sheet history is a reliable fallback when the current
   // OpenDART response omits borrowing accounts (and therefore its display text).
   const borrowingDependency = data?.borrowing_dependency ?? currentBalance?.borrowing_dependency;
@@ -645,11 +654,17 @@ function FinancialView({ companies, selectedCompany }) {
     const cells = [["자산", row?.assets], ["부채", row?.liabilities], ["자본", row?.equity]];
     return <div className="balance-tooltip"><strong>{label}</strong><table><thead><tr><th>항목</th><th>금액</th><th>비중</th><th>QoQ</th></tr></thead><tbody>{cells.map(([name, value]) => { const key = name === "자산" ? "assets" : name === "부채" ? "liabilities" : "equity"; const qoq = value == null || previous?.[key] == null || previous[key] === 0 ? null : ((value - previous[key]) / Math.abs(previous[key])) * 100; return <tr key={name}><td>{name}</td><td>{value == null ? "-" : `${Number(value).toLocaleString()}억`}</td><td>{assets && name !== "자산" ? `${((value / assets) * 100).toFixed(1)}%` : "100.0%"}</td><td>{qoq == null ? "-" : `${qoq > 0 ? "▲" : "▼"} ${Math.abs(qoq).toFixed(1)}%`}</td></tr>})}</tbody></table></div>;
   };
+  const CashflowTooltip = ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null;
+    const row = payload[0].payload;
+    const cells = [["영업CF", row.operating_cf], ["Capex", row.capex], ["FCF", row.fcf]];
+    return <div className="balance-tooltip cashflow-tooltip"><strong>{label}</strong><table><tbody>{cells.map(([name, value]) => <tr key={name}><td>{name}</td><td>{formatCashAmount(value)}</td></tr>)}</tbody></table></div>;
+  };
   const metricSets = data
     ? {
         income: [["매출액", data.revenue_display], ["영업이익", data.operating_income_display], ["당기순이익", data.net_income_display], ["영업이익률", data.operating_margin_display], ["순이익률", data.net_margin_display]],
         balance: [balanceMetric("자산총계", data.assets_display, "assets"), balanceMetric("부채총계", data.liabilities_display, "liabilities", true), balanceMetric("자본총계", data.equity_display, "equity"), balanceMetric("부채비율", data.debt_ratio_display, "debt_ratio", true), balanceMetric("차입금의존도", borrowingDependencyDisplay, "borrowing_dependency", true)],
-        cashflow: [["영업활동 현금흐름", data.operating_cf_display], ["투자활동 현금흐름", data.investing_cf_display], ["재무활동 현금흐름", data.financing_cf_display], ["현금 및 현금성자산", data.cash_display]],
+        cashflow: [cashMetric("영업활동 현금흐름", "operating_cf"), cashMetric("투자활동 현금흐름", "investing_cf"), cashMetric("재무활동 현금흐름", "financing_cf"), cashMetric("현금 및 현금성자산", "cash"), cashMetric("잉여현금흐름(FCF)", "fcf")],
       }
     : { income: [], balance: [], cashflow: [] };
   const tabs = [
@@ -794,10 +809,13 @@ function FinancialView({ companies, selectedCompany }) {
               const [label, value] = Array.isArray(metric) ? metric : [metric.label, metric.value];
               const qoq = Array.isArray(metric) ? null : metric.qoq;
               const favorable = metric.inverse ? qoq < 0 : qoq > 0;
+              const qoqLabel = metric.qoqType === "amount"
+                ? qoq == null ? "QoQ 비교 불가" : `${qoq >= 0 ? "▲ +" : "▼ -"}${Math.abs(qoq).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}억 QoQ`
+                : qoq == null ? "QoQ 비교 불가" : `${qoq > 0 ? "▲" : "▼"} ${Math.abs(qoq).toFixed(1)}% QoQ`;
               return <article key={label}>
                 <span>{label}</span>
                 <strong>{value || "-"}</strong>
-                {activeStatement === "balance" && <small className={`balance-qoq ${qoq == null ? "neutral" : favorable ? "positive" : "negative"}`}>{qoq == null ? "QoQ 비교 불가" : `${qoq > 0 ? "▲" : "▼"} ${Math.abs(qoq).toFixed(1)}% QoQ`}</small>}
+                {(activeStatement === "balance" || activeStatement === "cashflow") && <small className={`balance-qoq ${qoq == null ? "neutral" : favorable ? "positive" : "negative"}`}>{qoqLabel}</small>}
               </article>;
             })}
           </section>
@@ -911,13 +929,13 @@ function FinancialView({ companies, selectedCompany }) {
                         <Bar
                           dataKey="investing_cf"
                           name="투자CF"
-                          fill="#8a6de9"
+                          fill="#e39a35"
                           barSize={16}
                         />
                         <Bar
                           dataKey="financing_cf"
                           name="재무CF"
-                          fill="#ef9b34"
+                          fill="#8a6de9"
                           barSize={16}
                         />
                       </>
@@ -928,8 +946,10 @@ function FinancialView({ companies, selectedCompany }) {
             </article>
             <article>
               <h3>
-                {activeStatement === "balance" ? "재무 안정성 지표" : "수익성·성장성 지표"} <small>단위: %</small>
+                {activeStatement === "balance" ? "재무 안정성 지표" : activeStatement === "cashflow" ? "잉여현금흐름(FCF) 및 설비투자(Capex) 추이" : "수익성·성장성 지표"}
+                <small>단위: {activeStatement === "balance" || activeStatement === "income" ? "%" : "억원"}</small>
               </h3>
+              {activeStatement === "cashflow" && <p className="cashflow-color-guide"><span className="capex-dot" />설비투자 규모 <span className="positive-dot" />FCF 흑자·현금 창출 <span className="negative-dot" />FCF 적자·현금 부족</p>}
               <div className="chart-frame">
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart
@@ -943,18 +963,22 @@ function FinancialView({ companies, selectedCompany }) {
                     />
                     <YAxis tick={{ fontSize: 9, fill: "#708098" }} width={42} />
                     <Tooltip
-                      formatter={(value) =>
-                        value == null || Number.isNaN(Number(value))
-                          ? "-"
-                          : `${Number(value).toFixed(1)}%`
-                      }
+                      content={activeStatement === "cashflow" ? <CashflowTooltip /> : undefined}
+                      formatter={(value) => value == null || Number.isNaN(Number(value)) ? "-" : `${Number(value).toFixed(1)}%`}
                       contentStyle={{
                         fontSize: 10,
                         borderRadius: 8,
                         borderColor: "#d7e0ec",
                       }}
                     />
-                    <Legend wrapperStyle={{ fontSize: 9 }} />
+                    <Legend
+                      wrapperStyle={{ fontSize: 9 }}
+                      payload={activeStatement === "cashflow" ? [
+                        { value: "Capex · 설비투자", type: "square", color: "#9fb4ca" },
+                        { value: "FCF 흑자 · 현금 창출", type: "square", color: "#2687d9" },
+                        { value: "FCF 적자 · 현금 부족", type: "square", color: "#e76f51" },
+                      ] : undefined}
+                    />
                     {activeStatement === "income" ? (
                       <>
                         <Line
@@ -1016,28 +1040,11 @@ function FinancialView({ companies, selectedCompany }) {
                       </>
                     ) : (
                       <>
-                        <Line
-                          type="monotone"
-                          dataKey="operating_growth"
-                          name="영업CF 연계 추이"
-                          stroke="#2475e8"
-                          strokeWidth={2}
-                          dot={{ r: 3 }}
-                        >
-                          <LabelList
-                            content={renderRateLabel("#1e62cf", -10)}
-                          />
-                        </Line>
-                        <Line
-                          type="monotone"
-                          dataKey="net_growth"
-                          name="순이익 성장률"
-                          stroke="#75bd45"
-                          strokeWidth={2}
-                          dot={{ r: 3 }}
-                        >
-                          <LabelList content={renderRateLabel("#4d912b", 14)} />
-                        </Line>
+                        <ReferenceLine y={0} stroke="#8795a8" strokeWidth={1.2} />
+                        <Bar dataKey="capex" name="Capex" fill="#9fb4ca" barSize={18} radius={[3, 3, 0, 0]} />
+                        <Bar dataKey="fcf" name="FCF" fill="#2687d9" barSize={18} radius={[3, 3, 0, 0]}>
+                          {chartData.map((row) => <Cell key={row.label} fill={row.fcf >= 0 ? "#2687d9" : "#e76f51"} />)}
+                        </Bar>
                       </>
                     )}
                   </ComposedChart>

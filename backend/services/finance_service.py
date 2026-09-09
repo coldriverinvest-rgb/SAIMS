@@ -41,7 +41,7 @@ def quarterly_periods(end_year: int, end_report_code: str, count: int = 8) -> li
 def normalize_quarterly_history(items: list[dict]) -> list[dict]:
     """Convert DART year-to-date income/cashflow values into standalone quarters."""
     ordered = sorted(items, key=lambda item: (item["year"], QUARTERLY_CODES.index(item["report_code"])))
-    flow_fields = ("revenue", "operating_income", "net_income", "operating_cf", "investing_cf", "financing_cf")
+    flow_fields = ("revenue", "operating_income", "net_income", "operating_cf", "investing_cf", "financing_cf", "capex")
     cumulative_by_year: dict[int, dict[str, float | None]] = {}
     result = []
     for source in ordered:
@@ -54,8 +54,13 @@ def normalize_quarterly_history(items: list[dict]) -> list[dict]:
             if cumulative is not None and prior is not None:
                 item[field] = round(cumulative - prior, 1)
             previous[field] = cumulative
+        item["fcf"] = round(item["operating_cf"] - item["capex"], 1) if item.get("operating_cf") is not None and item.get("capex") is not None else None
+        item["cf_operating"] = item.get("operating_cf")
+        item["cf_investing"] = item.get("investing_cf")
+        item["cf_financing"] = item.get("financing_cf")
         item["operating_margin"] = ratio(item.get("operating_income"), item.get("revenue"))
         item["net_margin"] = ratio(item.get("net_income"), item.get("revenue"))
+        item["fcf"] = round(item["operating_cf"] - item["capex"], 1) if item.get("operating_cf") is not None and item.get("capex") is not None else None
         item["quarter_label"] = f"{year} {QUARTER_LABELS[code]}"
         result.append(item)
     return result
@@ -80,6 +85,8 @@ def fetch_financials(corp_name: str, year: int | None = None, report_code: str |
     long_borrowings=pick(statement,["ifrs-full_LongtermBorrowings","ifrs_LongtermBorrowings","dart_LongTermBorrowings"])
     borrowings=sum(value for value in (short_borrowings,long_borrowings) if value is not None) if short_borrowings is not None or long_borrowings is not None else None
     operating_cf=pick(statement,["ifrs-full_CashFlowsFromUsedInOperatingActivities","ifrs_CashFlowsFromUsedInOperatingActivities"],True); investing_cf=pick(statement,["ifrs-full_CashFlowsFromUsedInInvestingActivities","ifrs_CashFlowsFromUsedInInvestingActivities"],True); financing_cf=pick(statement,["ifrs-full_CashFlowsFromUsedInFinancingActivities","ifrs_CashFlowsFromUsedInFinancingActivities"],True); cash=pick(statement,["ifrs-full_CashAndCashEquivalents","ifrs_CashAndCashEquivalents"])
+    capex=pick(statement,["ifrs-full_PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities","ifrs_PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities","dart_PurchaseOfPropertyPlantAndEquipment"],True)
+    fcf=operating_cf-capex if operating_cf is not None and capex is not None else None
     receipt=safe_text(statement.iloc[0].get("rcept_no")); debt_ratio=ratio(liabilities,equity); borrowing_dependency=ratio(borrowings,assets); operating_margin=ratio(operating,revenue); net_margin=ratio(net,revenue)
     return {
         "corp_name": corp_name,
@@ -93,13 +100,15 @@ def fetch_financials(corp_name: str, year: int | None = None, report_code: str |
         "revenue": to_eok(revenue), "operating_income": to_eok(operating), "net_income": to_eok(net),
         "assets": to_eok(assets), "liabilities": to_eok(liabilities), "equity": to_eok(equity), "borrowings": to_eok(borrowings),
         "operating_cf": to_eok(operating_cf), "investing_cf": to_eok(investing_cf),
-        "financing_cf": to_eok(financing_cf), "cash": to_eok(cash),
+        "financing_cf": to_eok(financing_cf), "cash": to_eok(cash), "capex": to_eok(capex), "fcf": to_eok(fcf),
+        "cf_operating": to_eok(operating_cf), "cf_investing": to_eok(investing_cf), "cf_financing": to_eok(financing_cf),
         "debt_ratio": debt_ratio, "borrowing_dependency": borrowing_dependency, "operating_margin": operating_margin, "net_margin": net_margin,
         "revenue_display": format_krw(revenue), "operating_income_display": format_krw(operating),
         "net_income_display": format_krw(net), "assets_display": format_krw(assets),
         "liabilities_display": format_krw(liabilities), "equity_display": format_krw(equity), "borrowing_dependency_display": format_ratio(borrowing_dependency),
         "operating_cf_display": format_krw(operating_cf), "investing_cf_display": format_krw(investing_cf),
         "financing_cf_display": format_krw(financing_cf), "cash_display": format_krw(cash),
+        "capex_display": format_krw(capex), "fcf_display": format_krw(fcf),
         "debt_ratio_display": format_ratio(debt_ratio), "operating_margin_display": format_ratio(operating_margin),
         "net_margin_display": format_ratio(net_margin),
         "source_url": f"https://dart.fss.or.kr/dsaf001/main.do?rcpNo={receipt}" if receipt else "",
