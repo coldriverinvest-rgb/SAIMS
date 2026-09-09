@@ -721,6 +721,27 @@ function FinancialView({ companies, selectedCompany }) {
         </text>
       );
     };
+  const renderCashAmountLabel =
+    (fill) =>
+    ({ x, y, width, height, value }) => {
+      if (value == null || x == null || y == null || width == null || height == null) return null;
+      const isNegative = Number(value) < 0;
+      return (
+        <text
+          x={Number(x) + Number(width) / 2}
+          y={isNegative ? Number(y) + 12 : Number(y) - 5}
+          textAnchor="middle"
+          fill={fill}
+          stroke="#ffffff"
+          strokeWidth={2.5}
+          paintOrder="stroke"
+          fontSize={7.5}
+          fontWeight={800}
+        >
+          {Math.round(Number(value)).toLocaleString("ko-KR")}
+        </text>
+      );
+    };
   return (
     <>
       <section className="finance-toolbar">
@@ -838,7 +859,7 @@ function FinancialView({ companies, selectedCompany }) {
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart
                     data={chartData}
-                    margin={{ top: activeStatement === "income" ? 38 : 18, right: 16, bottom: 2, left: 2 }}
+                    margin={{ top: activeStatement === "income" ? 38 : activeStatement === "cashflow" ? 28 : 18, right: 16, bottom: activeStatement === "cashflow" ? 12 : 2, left: 2 }}
                     barCategoryGap="34%"
                   >
                     <CartesianGrid stroke="#e6ebf2" vertical={false} />
@@ -925,19 +946,19 @@ function FinancialView({ companies, selectedCompany }) {
                           name="영업CF"
                           fill="#2475e8"
                           barSize={16}
-                        />
+                        ><LabelList dataKey="operating_cf" content={renderCashAmountLabel("#1f61c9")} /></Bar>
                         <Bar
                           dataKey="investing_cf"
                           name="투자CF"
                           fill="#e39a35"
                           barSize={16}
-                        />
+                        ><LabelList dataKey="investing_cf" content={renderCashAmountLabel("#bf781c")} /></Bar>
                         <Bar
                           dataKey="financing_cf"
                           name="재무CF"
                           fill="#8a6de9"
                           barSize={16}
-                        />
+                        ><LabelList dataKey="financing_cf" content={renderCashAmountLabel("#6d52bb")} /></Bar>
                       </>
                     )}
                   </ComposedChart>
@@ -1041,9 +1062,10 @@ function FinancialView({ companies, selectedCompany }) {
                     ) : (
                       <>
                         <ReferenceLine y={0} stroke="#8795a8" strokeWidth={1.2} />
-                        <Bar dataKey="capex" name="Capex" fill="#9fb4ca" barSize={18} radius={[3, 3, 0, 0]} />
+                        <Bar dataKey="capex" name="Capex" fill="#9fb4ca" barSize={18} radius={[3, 3, 0, 0]}><LabelList dataKey="capex" content={renderCashAmountLabel("#718ba4")} /></Bar>
                         <Bar dataKey="fcf" name="FCF" fill="#2687d9" barSize={18} radius={[3, 3, 0, 0]}>
                           {chartData.map((row) => <Cell key={row.label} fill={row.fcf >= 0 ? "#2687d9" : "#e76f51"} />)}
+                          <LabelList dataKey="fcf" content={({ value, ...props }) => renderCashAmountLabel(Number(value) >= 0 ? "#1d6cac" : "#c9543d")({ value, ...props })} />
                         </Bar>
                       </>
                     )}
@@ -1598,7 +1620,7 @@ export default function App() {
       .catch(() => {});
   }, []);
   const refreshMarket = async () => {
-    const stockCompanies = ["포스코퓨처엠", "에코프로비엠", "LG화학"];
+    const stockCompanies = ["포스코퓨처엠", "에코프로비엠", "엘앤에프"];
     const results = await Promise.allSettled([
       api.materials(),
       api.exchangeRate(),
