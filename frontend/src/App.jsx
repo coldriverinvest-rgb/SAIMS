@@ -623,6 +623,52 @@ function FinancialView({ companies, selectedCompany }) {
   const chartData = chartDataWithGrowth
     .slice(1)
     .slice(trendFrequency === "quarter" ? -8 : -6);
+  const currentBalanceIndex = chartDataWithGrowth.findIndex(item => item.year === data?.year && item.report_code === data?.report_code);
+  const currentBalance = currentBalanceIndex >= 0 ? chartDataWithGrowth[currentBalanceIndex] : chartDataWithGrowth.at(-1);
+  const previousBalance = currentBalanceIndex > 0 ? chartDataWithGrowth[currentBalanceIndex - 1] : null;
+  const balanceQoq = key => {
+    const current = currentBalance?.[key], previous = previousBalance?.[key];
+    if (current == null || previous == null || previous === 0) return null;
+    return ((current - previous) / Math.abs(previous)) * 100;
+  };
+  const balanceMetric = (label, value, key, inverse=false) => ({ label, value, qoq: balanceQoq(key), inverse });
+  const formatCashAmount = (value) => value == null || Number.isNaN(Number(value))
+    ? "N/A"
+    : `${Number(value) < 0 ? "-" : ""}${Math.abs(Number(value)).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}억`;
+  const cashValue = (key) => currentBalance?.[key] ?? data?.[key];
+  const cashDelta = (key) => {
+    const current = currentBalance?.[key], previous = previousBalance?.[key];
+    return current == null || previous == null ? null : current - previous;
+  };
+  const cashMetric = (label, key) => ({ label, value: formatCashAmount(cashValue(key)), qoq: cashDelta(key), qoqType: "amount" });
+  // The latest balance-sheet history is a reliable fallback when the current
+  // OpenDART response omits borrowing accounts (and therefore its display text).
+  const borrowingDependency = data?.borrowing_dependency ?? currentBalance?.borrowing_dependency;
+  const borrowingDependencyDisplay = borrowingDependency == null || Number.isNaN(Number(borrowingDependency))
+    ? "N/A"
+    : `${Number(borrowingDependency).toFixed(1)}%`;
+  const BalanceTooltip = ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null;
+    const row = chartData.find(item => item.label === label);
+    const rowIndex = chartData.findIndex(item => item.label === label);
+    const previous = rowIndex > 0 ? chartData[rowIndex - 1] : null;
+    const assets = row?.assets || 0;
+    const cells = [["자산", row?.assets], ["부채", row?.liabilities], ["자본", row?.equity]];
+    return <div className="balance-tooltip"><strong>{label}</strong><table><thead><tr><th>항목</th><th>금액</th><th>비중</th><th>QoQ</th></tr></thead><tbody>{cells.map(([name, value]) => { const key = name === "자산" ? "assets" : name === "부채" ? "liabilities" : "equity"; const qoq = value == null || previous?.[key] == null || previous[key] === 0 ? null : ((value - previous[key]) / Math.abs(previous[key])) * 100; return <tr key={name}><td>{name}</td><td>{value == null ? "-" : `${Number(value).toLocaleString()}억`}</td><td>{assets && name !== "자산" ? `${((value / assets) * 100).toFixed(1)}%` : "100.0%"}</td><td>{qoq == null ? "-" : `${qoq > 0 ? "▲" : "▼"} ${Math.abs(qoq).toFixed(1)}%`}</td></tr>})}</tbody></table></div>;
+  };
+  const CashflowTooltip = ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null;
+    const row = payload[0].payload;
+    const cells = [["영업CF", row.operating_cf], ["Capex", row.capex], ["FCF", row.fcf]];
+    return <div className="balance-tooltip cashflow-tooltip"><strong>{label}</strong><table><tbody>{cells.map(([name, value]) => <tr key={name}><td>{name}</td><td>{formatCashAmount(value)}</td></tr>)}</tbody></table></div>;
+  };
+  const metricSets = data
+    ? {
+        income: [["매출액", data.revenue_display], ["영업이익", data.operating_income_display], ["당기순이익", data.net_income_display], ["영업이익률", data.operating_margin_display], ["순이익률", data.net_margin_display], ["ROE", data.roe_display]],
+        balance: [balanceMetric("자산총계", data.assets_display, "assets"), balanceMetric("부채총계", data.liabilities_display, "liabilities", true), balanceMetric("자본총계", data.equity_display, "equity"), balanceMetric("부채비율", data.debt_ratio_display, "debt_ratio", true), balanceMetric("유동비율", data.current_ratio_display, "current_ratio"), balanceMetric("순차입금비율", data.net_debt_ratio_display, "net_debt_ratio", true)],
+        cashflow: [cashMetric("영업활동 현금흐름", "operating_cf"), cashMetric("투자활동 현금흐름", "investing_cf"), cashMetric("재무활동 현금흐름", "financing_cf"), cashMetric("현금 및 현금성자산", "cash"), cashMetric("잉여현금흐름(FCF)", "fcf")],
+      }
+    : { income: [], balance: [], cashflow: [] };
   const tabs = [
     { id: "income", label: "포괄손익계산서" },
     { id: "balance", label: "재무상태표" },
@@ -657,7 +703,7 @@ function FinancialView({ companies, selectedCompany }) {
         </text>
       );
     };
-  const renderBarMarginLabel =
+  const renderBarRateLabel =
     (fill) =>
     ({ x, y, width, height, value }) => {
       const label = formatRateLabel(value);
@@ -810,13 +856,11 @@ function FinancialView({ companies, selectedCompany }) {
                     />
                     <Legend
                       wrapperStyle={{ fontSize: 9 }}
-                      content={activeStatement === "balance" ? () => (
-                        <div style={{ display: "flex", justifyContent: "center", gap: 10, fontSize: 9 }}>
-                          {[["자산", "#2475e8"], ["부채", "#ef765c"], ["자본", "#75bd45"]].map(([label, color]) => (
-                            <span key={label} style={{ color, display: "inline-flex", alignItems: "center", gap: 4 }}><i style={{ width: 10, height: 10, background: color, display: "inline-block" }} />{label}</span>
-                          ))}
-                        </div>
-                      ) : undefined}
+                      payload={activeStatement === "balance" ? [
+                        { value: "자산", type: "line", color: "#2f76d8" },
+                        { value: "부채", type: "square", color: "#ef765c" },
+                        { value: "자본", type: "square", color: "#5fad3f" },
+                      ] : undefined}
                     />
                     {activeStatement === "income" && (
                       <>
@@ -844,7 +888,7 @@ function FinancialView({ companies, selectedCompany }) {
                         >
                           <LabelList
                             dataKey="operating_margin"
-                            content={renderBarMarginLabel("#c9543d")}
+                            content={renderBarRateLabel("#c9543d")}
                           />
                         </Bar>
                         <Bar
@@ -855,7 +899,7 @@ function FinancialView({ companies, selectedCompany }) {
                         >
                           <LabelList
                             dataKey="net_margin"
-                            content={renderBarMarginLabel("#4d912b")}
+                            content={renderBarRateLabel("#4d912b")}
                           />
                         </Bar>
                       </>
