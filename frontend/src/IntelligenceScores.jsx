@@ -57,7 +57,10 @@ export default function IntelligenceScores({ data, companies, selectedCompany, o
     let active = true;
     setBriefingLoading(true);
     setBriefingError('');
-    Promise.allSettled([api.executiveBriefing(companies), api.materials()])
+    const briefingRequest = typeof api.executiveBriefing === 'function'
+      ? api.executiveBriefing(companies)
+      : Promise.reject(new Error('Executive briefing API unavailable'));
+    Promise.allSettled([briefingRequest, api.materials()])
       .then(([briefingResult, materialsResult]) => {
         if (!active) return;
         if (briefingResult.status === 'fulfilled') setBriefing(briefingResult.value);

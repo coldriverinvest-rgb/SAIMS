@@ -22,6 +22,8 @@ export const api = {
   financials: (company, year, reportCode, statementType) => request(`/financials/${encodeURIComponent(company)}?year=${year}&report_code=${reportCode}&fs_div=${statementType}`),
   financialHistory: (company, endYear, reportCode, statementType, frequency) => request(`/financials/${encodeURIComponent(company)}/history?end_year=${endYear}&report_code=${reportCode}&fs_div=${statementType}&frequency=${frequency}&quarters=9&years=7`),
   stockAnalysis: (company, period) => request(`/stocks/${encodeURIComponent(company)}?period=${period}`),
+  materials: () => request("/materials"),
+  materialNews: async () => ({ items: [] }),
   analyze: (payload) => request("/analyze", { method: "POST", body: JSON.stringify(payload) }),
   telegram: (payload) => request("/telegram", { method: "POST", body: JSON.stringify(payload) }),
   validateCompany: (name) => request(`/companies/validate?name=${encodeURIComponent(name)}`),

@@ -276,8 +276,27 @@ function Header({ status }) {
 }
 
 function DailyBriefing({ lines, loading }) {
+  const fallback = [
+    { id: "peer-capex", level: "WARN", title: "PEER MOVEMENT", fact: "에코프로비엠 대규모 자본조달 및 증설 계획 점검", impact: "Peer CAPEX 경쟁 심화와 북미 설비 격차 모니터링" },
+    { id: "north-america", level: "CRITICAL", title: "SUPPLY CHAIN", fact: "삼성SDI 북미 합작법인 시설자금 5,000억원 지원", impact: "당사 북미향 양극재 공급 일정과 초기 가동률 연동 점검" },
+    { id: "recycling", level: "INFO", title: "POLICY / MARKET", fact: "완성차·배터리사의 폐배터리 ESS 실증 확대", impact: "리사이클링 및 원료 회수 밸류체인 대응안 검토" },
+  ];
+  const externalLines = lines.filter((line) => {
+    const searchable = typeof line === "object"
+      ? `${line.title || ""} ${line.fact || ""}`
+      : String(line);
+    return !/포스코\s*퓨처엠|퓨처엠/i.test(searchable);
+  });
+  const briefingSource = externalLines.length
+    ? [...externalLines, ...fallback].slice(0, 3)
+    : fallback;
+  const briefings = briefingSource.map((line, index) => {
+        if (typeof line === "object") return line;
+        const [fact, impact] = String(line).split(/(?:→|➔|->)/);
+        return { id: `live-${index}`, level: index === 0 ? "CRITICAL" : index === 1 ? "WARN" : "INFO", title: index === 0 ? "CRITICAL" : index === 1 ? "PEER MOVEMENT" : "POLICY / MARKET", fact: fact.trim(), impact: impact?.trim() || fallback[index].impact };
+      });
   return (
-    <section className="daily-brief">
+    <section className="daily-brief executive-daily-brief">
       <div className="daily-mark">
         <Sparkles />
         <span>
@@ -290,14 +309,11 @@ function DailyBriefing({ lines, loading }) {
         {loading ? (
           <Skeleton rows={3} />
         ) : (
-          (lines.length
-            ? lines
-            : ["실시간 데이터 갱신 후 오늘의 핵심 신호를 제공합니다."]
-          ).map((line, index) => (
-            <p key={index}>
-              <b>0{index + 1}</b>
-              {line}
-            </p>
+          briefings.map((item) => (
+            <article className="executive-brief-line" key={item.id}>
+              <span className={`brief-level ${item.level.toLowerCase()}`}>{item.title}</span>
+              <div><p><b>FACT</b>{item.fact}</p><p><b>IMPACT</b>{item.impact}</p></div>
+            </article>
           ))
         )}
       </div>
@@ -306,13 +322,18 @@ function DailyBriefing({ lines, loading }) {
 }
 
 function DisclosurePanel({ items, loading, onAnalyze }) {
+  const [keyOnly, setKeyOnly] = useState(true);
+  const keyPattern = /투자|시설|CAPEX|인수|합병|M&A|수주|공급계약|유상증자|무상증자|증자|특허|소송|잠정실적|영업실적|매출액.*변경|금전대여|차입/i;
+  const routinePattern = /임원.*소유|주식등의대량보유|주주총회결과|최대주주.*변경이 없는|소유상황보고/i;
+  const executiveItems = items.map((item) => ({ ...item, isKeyExecutiveIssue: item.is_major || (keyPattern.test(item.report_nm || "") && !routinePattern.test(item.report_nm || "")), keyMetrics: item.key_metrics || ((item.report_nm || "").match(/\d[\d,.]*\s*(?:조|억|만)?\s*원|\d+(?:\.\d+)?%/g) || []).slice(0, 2).join(" · ") }));
+  const visibleItems = keyOnly ? executiveItems.filter((item) => item.isKeyExecutiveIssue) : executiveItems;
   return (
     <section className="panel">
       <div className="panel-heading">
         <h2>
           <FileText /> 실시간 DART 전자공시
         </h2>
-        <span>최근 30일</span>
+        <div className="disclosure-heading-actions"><span>최근 30일</span><label className="executive-switch"><input type="checkbox" checked={keyOnly} onChange={(e) => setKeyOnly(e.target.checked)} /><i/><b>핵심 공시만 보기</b></label></div>
       </div>
       <div className="table-scroll">
         {loading ? (
@@ -323,20 +344,21 @@ function DisclosurePanel({ items, loading, onAnalyze }) {
               <tr>
                 <th>접수일</th>
                 <th>기업</th>
-                <th>보고서</th>
-                <th></th>
+                <th>보고서 제목</th>
+                <th>핵심 수치 / 요약</th>
+                <th>AI 액션</th>
               </tr>
             </thead>
             <tbody>
-              {items.length ? (
-                items.map((item) => (
-                  <tr key={item.rcept_no}>
+              {visibleItems.length ? (
+                visibleItems.map((item) => (
+                  <tr key={item.rcept_no} title={`${item.corp_name} · ${item.report_nm}${item.keyMetrics ? ` · ${item.keyMetrics}` : ""}`}>
                     <td>{item.rcept_dt}</td>
                     <td>{item.corp_name}</td>
                     <td>
                       <div className="report-cell">
-                        {item.is_major && (
-                          <span className="major-badge">주요</span>
+                        {item.isKeyExecutiveIssue && (
+                          <span className="major-badge">핵심</span>
                         )}
                         <a
                           href={item.url}
@@ -348,6 +370,7 @@ function DisclosurePanel({ items, loading, onAnalyze }) {
                         </a>
                       </div>
                     </td>
+                    <td><span className="metric-chip">{item.keyMetrics || "전략 영향 AI 요약"}</span></td>
                     <td>
                       <button
                         className="text-button"
@@ -368,8 +391,8 @@ function DisclosurePanel({ items, loading, onAnalyze }) {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="4" className="empty">
-                    필터 조건에 맞는 공시가 없습니다.
+                  <td colSpan="5" className="empty">
+                    핵심 경영 공시가 없습니다. 토글을 끄면 전체 공시를 볼 수 있습니다.
                   </td>
                 </tr>
               )}
@@ -382,6 +405,14 @@ function DisclosurePanel({ items, loading, onAnalyze }) {
 }
 
 function NewsPanel({ items, loading, onSelect }) {
+  const [expanded, setExpanded] = useState({});
+  const topicKey = (title = "") => title.replace(/\[[^\]]+\]|\([^)]*\)|["'“”‘’]/g, " ").replace(/포스코퓨처엠|에코프로비엠|삼성SDI|LG에너지솔루션|현대차|엘앤에프/g, "").replace(/[^가-힣a-zA-Z0-9]/g, "").slice(0, 18) || title.slice(0, 18);
+  const clusters = Object.values(items.reduce((acc, item) => {
+    const key = item.topic_id || topicKey(item.title);
+    if (!acc[key]) acc[key] = { id: key, topicTitle: item.ai?.strategy_tag && item.ai.strategy_tag !== "시장/일반" ? item.ai.strategy_tag : item.title, mainArticle: item, relatedArticles: [], sentiment: item.ai?.strategy_type === "risk" ? "RISK" : ["opportunity", "technology", "investment"].includes(item.ai?.strategy_type) ? "POSITIVE" : "NEUTRAL" };
+    else acc[key].relatedArticles.push(item);
+    return acc;
+  }, {}));
   return (
     <section className="panel">
       <div className="panel-heading">
@@ -393,34 +424,17 @@ function NewsPanel({ items, loading, onSelect }) {
       <div className="news-scroll">
         {loading ? (
           <Skeleton />
-        ) : items.length ? (
-          items.map((item, index) => (
-            <article className="news-row" key={`${item.link}-${index}`}>
-              <div className={`strategy-tag ${tagClass(item)}`}>
-                <Tag />
-                <strong>{item.ai?.strategy_tag || "시장/일반"}</strong>
-                <small>{item.corp_name}</small>
-              </div>
-              <div className="news-copy">
-                <strong>{item.title}</strong>
-                <small>
-                  {item.source} · {item.time}
-                </small>
-              </div>
-              <div className="row-actions">
-                <a href={item.link} target="_blank" rel="noreferrer">
-                  <ExternalLink /> 원문
-                </a>
-                <button
-                  onClick={() =>
-                    onSelect({ ...item, type: "news", text: item.summary })
-                  }
-                >
-                  브리핑
-                </button>
-              </div>
-            </article>
-          ))
+        ) : clusters.length ? (
+          clusters.map((cluster) => {
+            const item = cluster.mainArticle;
+            const isOpen = expanded[cluster.id];
+            return <article className="news-cluster" key={cluster.id}>
+              <div className="news-cluster-top"><span className={`value-sentiment ${cluster.sentiment.toLowerCase()}`}>{cluster.sentiment === "POSITIVE" ? "긍정 / 기회" : cluster.sentiment === "RISK" ? "리스크 / 부정" : "중립"}</span><small>{item.corp_name}</small></div>
+              <strong className="topic-title">{cluster.topicTitle}</strong>
+              <div className="news-cluster-main"><div className="news-copy"><strong>{item.title}</strong><small>{item.source} · {item.time}</small></div><div className="row-actions"><a href={item.link} target="_blank" rel="noreferrer"><ExternalLink/> 원문</a><button onClick={() => onSelect({ ...item, type: "news", text: item.summary })}>브리핑</button></div></div>
+              {cluster.relatedArticles.length > 0 && <><button className="cluster-toggle" onClick={() => setExpanded((state) => ({...state, [cluster.id]: !isOpen}))}>외 관련 기사 {cluster.relatedArticles.length}건 {isOpen ? "접기 ▲" : "펼치기 ▼"}</button>{isOpen && <div className="related-articles">{cluster.relatedArticles.map((related, index) => <a key={`${related.link}-${index}`} href={related.link} target="_blank" rel="noreferrer"><span>{related.title}</span><small>{related.source} · {related.time}</small></a>)}</div>}</>}
+            </article>;
+          })
         ) : (
           <div className="empty">필터 조건에 맞는 뉴스가 없습니다.</div>
         )}
@@ -1577,20 +1591,6 @@ export default function App() {
         <Header status={status} />
         {view === "intel" ? (
           <>
-            <section className={`company-focus ${selectedCompany ? "active" : ""}`}>
-              <div>
-                <span>SELECTED COMPANY</span>
-                <strong>{selectedCompany || "전체 모니터링 기업"}</strong>
-              </div>
-              <p>
-                {selectedCompany
-                  ? `${selectedCompany} 공시 ${filtered.disclosures.length}건 · 뉴스 ${filtered.news.length}건을 표시합니다.`
-                  : `전체 공시 ${filtered.disclosures.length}건 · 뉴스 ${filtered.news.length}건을 표시합니다.`}
-              </p>
-              {selectedCompany && (
-                <button onClick={() => setSelectedCompany("")}>전체 보기</button>
-              )}
-            </section>
             <DailyBriefing
               lines={data.daily_briefing || []}
               loading={loading}

@@ -18,7 +18,8 @@ export default function MaterialsPage() {
   useEffect(()=>{refresh();const timer=setInterval(()=>{if(!document.hidden)refresh();},10000);return()=>clearInterval(timer);},[]);
   useEffect(()=>{
     let active=true;setNewsBusy(true);setNewsError('');
-    api.materialNews(selected).then(result=>{if(active)setNews(result.items||[]);}).catch(()=>{if(active){setNews([]);setNewsError('관련 뉴스를 불러오지 못했습니다.');}}).finally(()=>{if(active)setNewsBusy(false);});
+    const newsRequest=typeof api.materialNews==='function'?api.materialNews(selected):Promise.resolve({items:[]});
+    newsRequest.then(result=>{if(active)setNews(result.items||[]);}).catch(()=>{if(active){setNews([]);setNewsError('관련 뉴스를 불러오지 못했습니다.');}}).finally(()=>{if(active)setNewsBusy(false);});
     return()=>{active=false;};
   },[selected]);
   const item=data?.items.find(x=>x.id===selected);
