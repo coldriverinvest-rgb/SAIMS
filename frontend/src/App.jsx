@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   BarChart3,
@@ -20,11 +20,10 @@ import {
 import { api } from "./api";
 import IntelligenceScores from "./IntelligenceScores";
 import MaterialsPage from "./MaterialsPage";
+import StockExecutiveView from "./StockExecutiveView";
 import {
   Bar,
-  Brush,
   CartesianGrid,
-  Cell,
   ComposedChart,
   LabelList,
   Legend,
@@ -35,6 +34,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { formatEok, formatMultiple, formatPercent, formatShares, formatWon, formatWonCompact } from "./utils/financeFormat";
 
 const COMPANY_GROUPS = {
   "자사/그룹": ["포스코퓨처엠", "포스코홀딩스"],
@@ -242,7 +242,7 @@ function Sidebar({
           </button>
           <button
             className="refresh-button"
-            onClick={onRefresh}
+            onClick={() => onRefresh(true)}
             disabled={loading}
           >
             <RefreshCw className={loading ? "spin" : ""} />{" "}
@@ -254,20 +254,8 @@ function Sidebar({
   );
 }
 
-const tickerChange = (value) => {
-  if (value === null || value === undefined) return <span className="ticker-flat">—</span>;
-  const tone = value > 0 ? "ticker-up" : value < 0 ? "ticker-down" : "ticker-flat";
-  return <span className={tone}>{value > 0 ? "+" : ""}{Number(value).toFixed(2)}%</span>;
-};
-
-function Header({ status, market, disclosures, news, showTicker }) {
-  const material = (id) => market.materials?.find((item) => item.id === id);
-  const now = new Date();
-  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  const newDisclosureCount = disclosures.filter((item) => item.rcept_dt?.startsWith(today)).length;
-  const riskCount = news.filter((item) => item.time?.startsWith(today) && (item.ai?.sentiment === "주의" || item.ai?.strategy_type === "risk")).length;
+function Header({ status }) {
   return (
-    <>
     <header className="top-header">
       <div>
         <span className="eyebrow">EXECUTIVE INTELLIGENCE PLATFORM</span>
@@ -284,34 +272,6 @@ function Header({ status, market, disclosures, news, showTicker }) {
         <small>{new Date().toLocaleString("ko-KR")}</small>
       </div>
     </header>
-    {showTicker && <section className="macro-ticker" aria-label="핵심 시장 지표">
-      <div className="ticker-label"><Activity size={14}/><span>MARKET PULSE</span></div>
-      {[material("lithium"), material("nickel")].map((item, index) => (
-        <div className="ticker-item" key={item?.id || index}>
-          <small>{item?.name || (index ? "니켈" : "리튬")}</small>
-          <strong>{item?.price == null ? "데이터 대기" : Number(item.price).toLocaleString("ko-KR", { maximumFractionDigits: 2 })}</strong>
-          {tickerChange(item?.change_pct)}
-        </div>
-      ))}
-      <div className="ticker-item">
-        <small>원/달러</small>
-        <strong>{market.fx?.rate ? `₩${Number(market.fx.rate).toLocaleString("ko-KR", { maximumFractionDigits: 2 })}` : "데이터 대기"}</strong>
-        {tickerChange(market.fx?.change_pct)}
-      </div>
-      {(market.stocks || []).map((stock) => (
-        <div className="ticker-item ticker-stock" key={stock.corp_name}>
-          <small>{stock.corp_name}</small>
-          <strong>{stock.price ? `${Number(stock.price).toLocaleString("ko-KR")}원` : "조회 불가"}</strong>
-          {tickerChange(stock.change_rate)}
-        </div>
-      ))}
-      <div className="ticker-item ticker-count">
-        <small>오늘의 신호</small>
-        <strong>공시 {newDisclosureCount} · 리스크 {riskCount}</strong>
-        <span className={riskCount ? "ticker-alert" : "ticker-flat"}>{riskCount ? "점검 필요" : "정상"}</span>
-      </div>
-    </section>}
-    </>
   );
 }
 
@@ -574,6 +534,7 @@ function FinancialView({ companies, selectedCompany }) {
   const [year, setYear] = useState(defaultYear);
   const [reportCode, setReportCode] = useState(defaultReport);
   const [statementType, setStatementType] = useState("CFS");
+  const [trendFrequency, setTrendFrequency] = useState("quarter");
   const [activeStatement, setActiveStatement] = useState("income");
   const [data, setData] = useState(null);
   const [history, setHistory] = useState([]);
@@ -590,7 +551,7 @@ function FinancialView({ companies, selectedCompany }) {
     setError("");
     Promise.all([
       api.financials(company, year, reportCode, statementType),
-      api.financialHistory(company, year, reportCode, statementType),
+      api.financialHistory(company, year, reportCode, statementType, trendFrequency),
     ])
       .then(([current, historical]) => {
         setData(current);
@@ -602,7 +563,33 @@ function FinancialView({ companies, selectedCompany }) {
         setError(requestError.message);
       })
       .finally(() => setLoading(false));
-  }, [company, year, reportCode, statementType]);
+  }, [company, year, reportCode, statementType, trendFrequency]);
+  const metricSets = data
+    ? {
+        income: [
+          ["매출액", data.revenue_display],
+          ["영업이익", data.operating_income_display],
+          ["당기순이익", data.net_income_display],
+          ["영업이익률", data.operating_margin_display],
+          ["순이익률", data.net_margin_display],
+          ["ROE", data.roe_display],
+        ],
+        balance: [
+          ["자산총계", data.assets_display],
+          ["부채총계", data.liabilities_display],
+          ["자본총계", data.equity_display],
+          ["부채비율", data.debt_ratio_display],
+          ["유동비율", data.current_ratio_display],
+          ["순차입금비율", data.net_debt_ratio_display],
+        ],
+        cashflow: [
+          ["영업활동 현금흐름", data.operating_cf_display],
+          ["투자활동 현금흐름", data.investing_cf_display],
+          ["재무활동 현금흐름", data.financing_cf_display],
+          ["현금 및 현금성자산", data.cash_display],
+        ],
+      }
+    : { income: [], balance: [], cashflow: [] };
   const chartDataWithGrowth = history.map((item, index) => {
     const previous = history[index - 1];
     const growth = (value, prior) =>
@@ -620,53 +607,11 @@ function FinancialView({ companies, selectedCompany }) {
       net_growth: growth(item.net_income, previous?.net_income),
     };
   });
-  const chartData = chartDataWithGrowth.slice(-8);
-  const currentBalanceIndex = chartDataWithGrowth.findIndex(item => item.year === data?.year && item.report_code === data?.report_code);
-  const currentBalance = currentBalanceIndex >= 0 ? chartDataWithGrowth[currentBalanceIndex] : chartDataWithGrowth.at(-1);
-  const previousBalance = currentBalanceIndex > 0 ? chartDataWithGrowth[currentBalanceIndex - 1] : null;
-  const balanceQoq = key => {
-    const current = currentBalance?.[key], previous = previousBalance?.[key];
-    if (current == null || previous == null || previous === 0) return null;
-    return ((current - previous) / Math.abs(previous)) * 100;
-  };
-  const balanceMetric = (label, value, key, inverse=false) => ({ label, value, qoq: balanceQoq(key), inverse });
-  const formatCashAmount = (value) => value == null || Number.isNaN(Number(value))
-    ? "N/A"
-    : `${Number(value) < 0 ? "-" : ""}${Math.abs(Number(value)).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}억`;
-  const cashValue = (key) => currentBalance?.[key] ?? data?.[key];
-  const cashDelta = (key) => {
-    const current = currentBalance?.[key], previous = previousBalance?.[key];
-    return current == null || previous == null ? null : current - previous;
-  };
-  const cashMetric = (label, key) => ({ label, value: formatCashAmount(cashValue(key)), qoq: cashDelta(key), qoqType: "amount" });
-  // The latest balance-sheet history is a reliable fallback when the current
-  // OpenDART response omits borrowing accounts (and therefore its display text).
-  const borrowingDependency = data?.borrowing_dependency ?? currentBalance?.borrowing_dependency;
-  const borrowingDependencyDisplay = borrowingDependency == null || Number.isNaN(Number(borrowingDependency))
-    ? "N/A"
-    : `${Number(borrowingDependency).toFixed(1)}%`;
-  const BalanceTooltip = ({ active, payload, label }) => {
-    if (!active || !payload?.length) return null;
-    const row = chartData.find(item => item.label === label);
-    const rowIndex = chartData.findIndex(item => item.label === label);
-    const previous = rowIndex > 0 ? chartData[rowIndex - 1] : null;
-    const assets = row?.assets || 0;
-    const cells = [["자산", row?.assets], ["부채", row?.liabilities], ["자본", row?.equity]];
-    return <div className="balance-tooltip"><strong>{label}</strong><table><thead><tr><th>항목</th><th>금액</th><th>비중</th><th>QoQ</th></tr></thead><tbody>{cells.map(([name, value]) => { const key = name === "자산" ? "assets" : name === "부채" ? "liabilities" : "equity"; const qoq = value == null || previous?.[key] == null || previous[key] === 0 ? null : ((value - previous[key]) / Math.abs(previous[key])) * 100; return <tr key={name}><td>{name}</td><td>{value == null ? "-" : `${Number(value).toLocaleString()}억`}</td><td>{assets && name !== "자산" ? `${((value / assets) * 100).toFixed(1)}%` : "100.0%"}</td><td>{qoq == null ? "-" : `${qoq > 0 ? "▲" : "▼"} ${Math.abs(qoq).toFixed(1)}%`}</td></tr>})}</tbody></table></div>;
-  };
-  const CashflowTooltip = ({ active, payload, label }) => {
-    if (!active || !payload?.length) return null;
-    const row = payload[0].payload;
-    const cells = [["영업CF", row.operating_cf], ["Capex", row.capex], ["FCF", row.fcf]];
-    return <div className="balance-tooltip cashflow-tooltip"><strong>{label}</strong><table><tbody>{cells.map(([name, value]) => <tr key={name}><td>{name}</td><td>{formatCashAmount(value)}</td></tr>)}</tbody></table></div>;
-  };
-  const metricSets = data
-    ? {
-        income: [["매출액", data.revenue_display], ["영업이익", data.operating_income_display], ["당기순이익", data.net_income_display], ["영업이익률", data.operating_margin_display], ["순이익률", data.net_margin_display]],
-        balance: [balanceMetric("자산총계", data.assets_display, "assets"), balanceMetric("부채총계", data.liabilities_display, "liabilities", true), balanceMetric("자본총계", data.equity_display, "equity"), balanceMetric("부채비율", data.debt_ratio_display, "debt_ratio", true), balanceMetric("차입금의존도", borrowingDependencyDisplay, "borrowing_dependency", true)],
-        cashflow: [cashMetric("영업활동 현금흐름", "operating_cf"), cashMetric("투자활동 현금흐름", "investing_cf"), cashMetric("재무활동 현금흐름", "financing_cf"), cashMetric("현금 및 현금성자산", "cash"), cashMetric("잉여현금흐름(FCF)", "fcf")],
-      }
-    : { income: [], balance: [], cashflow: [] };
+  // 첫 데이터는 성장률 산출을 위한 기준 기간으로만 사용합니다.
+  // 차트는 직전 기간 대비 성장률이 계산된 시점부터 보여줍니다.
+  const chartData = chartDataWithGrowth
+    .slice(1)
+    .slice(trendFrequency === "quarter" ? -8 : -6);
   const tabs = [
     { id: "income", label: "포괄손익계산서" },
     { id: "balance", label: "재무상태표" },
@@ -674,6 +619,8 @@ function FinancialView({ companies, selectedCompany }) {
   ];
   const compactNumber = (value) =>
     value == null ? "-" : `${Number(value).toLocaleString()}억`;
+  const formatChartAmount = (value) =>
+    value == null ? "" : `${Math.round(Number(value)).toLocaleString("ko-KR")}억`;
   const formatRateLabel = (value) =>
     value == null || Number.isNaN(Number(value))
       ? ""
@@ -699,46 +646,28 @@ function FinancialView({ companies, selectedCompany }) {
         </text>
       );
     };
-  const renderBarRateLabel =
-    (fill, distance) =>
-    ({ x, y, width, value }) => {
+  const renderBarMarginLabel =
+    (fill) =>
+    ({ x, y, width, height, value }) => {
       const label = formatRateLabel(value);
       if (!label || x == null || y == null || width == null) return null;
       const isNegative = Number(value) < 0;
+      const labelY = isNegative
+        ? Number(y) + Math.abs(Number(height || 0)) + 8
+        : Number(y) - 5;
       return (
         <text
           x={Number(x) + Number(width) / 2}
-          y={Number(y) + (isNegative ? distance : -distance)}
+          y={labelY}
           textAnchor="middle"
           fill={fill}
           stroke="#ffffff"
           strokeWidth={3}
           paintOrder="stroke"
-          fontSize={8.5}
-          fontWeight={800}
+          fontSize={7.5}
+          fontWeight={700}
         >
           {label}
-        </text>
-      );
-    };
-  const renderCashAmountLabel =
-    (fill) =>
-    ({ x, y, width, height, value }) => {
-      if (value == null || x == null || y == null || width == null || height == null) return null;
-      const isNegative = Number(value) < 0;
-      return (
-        <text
-          x={Number(x) + Number(width) / 2}
-          y={isNegative ? Number(y) + 12 : Number(y) - 5}
-          textAnchor="middle"
-          fill={fill}
-          stroke="#ffffff"
-          strokeWidth={2.5}
-          paintOrder="stroke"
-          fontSize={7.5}
-          fontWeight={800}
-        >
-          {Math.round(Number(value)).toLocaleString("ko-KR")}
         </text>
       );
     };
@@ -797,6 +726,16 @@ function FinancialView({ companies, selectedCompany }) {
               <option value="OFS">별도재무제표</option>
             </select>
           </label>
+          <label>
+            추이 기준
+            <select
+              value={trendFrequency}
+              onChange={(event) => setTrendFrequency(event.target.value)}
+            >
+              <option value="quarter">분기 추이</option>
+              <option value="annual">연간 추이</option>
+            </select>
+          </label>
         </div>
       </section>
       <div className="statement-tabs">
@@ -826,41 +765,23 @@ function FinancialView({ companies, selectedCompany }) {
       ) : (
         <>
           <section className="finance-grid statement-metrics">
-            {metricSets[activeStatement].map((metric) => {
-              const [label, value] = Array.isArray(metric) ? metric : [metric.label, metric.value];
-              const qoq = Array.isArray(metric) ? null : metric.qoq;
-              const favorable = metric.inverse ? qoq < 0 : qoq > 0;
-              const qoqLabel = metric.qoqType === "amount"
-                ? qoq == null ? "QoQ 비교 불가" : `${qoq >= 0 ? "▲ +" : "▼ -"}${Math.abs(qoq).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}억 QoQ`
-                : qoq == null ? "QoQ 비교 불가" : `${qoq > 0 ? "▲" : "▼"} ${Math.abs(qoq).toFixed(1)}% QoQ`;
-              return <article key={label}>
+            {metricSets[activeStatement].map(([label, value]) => (
+              <article key={label}>
                 <span>{label}</span>
                 <strong>{value || "-"}</strong>
-                {(activeStatement === "balance" || activeStatement === "cashflow") && <small className={`balance-qoq ${qoq == null ? "neutral" : favorable ? "positive" : "negative"}`}>{qoqLabel}</small>}
-              </article>;
-            })}
+              </article>
+            ))}
           </section>
           <section className="financial-charts">
             <article>
               <h3>
-                주요 재무 항목
-                {activeStatement === "balance" ? (
-                  <small className="balance-chart-note">
-                    <span className="asset-key">총자산</span>
-                    <b>=</b>
-                    <span className="liability-key">부채</span>
-                    <b>+</b>
-                    <span className="equity-key">자본</span>
-                    <em>단위: 억원</em>
-                  </small>
-                ) : <small>단위: 억원</small>}
+                주요 재무 항목 <small>단위: 억원</small>
               </h3>
               <div className="chart-frame">
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart
                     data={chartData}
-                    margin={{ top: activeStatement === "income" ? 38 : activeStatement === "cashflow" ? 28 : 18, right: 16, bottom: activeStatement === "cashflow" ? 12 : 2, left: 2 }}
-                    barCategoryGap="34%"
+                    margin={{ top: 30, right: 16, bottom: 2, left: 2 }}
                   >
                     <CartesianGrid stroke="#e6ebf2" vertical={false} />
                     <XAxis
@@ -869,7 +790,6 @@ function FinancialView({ companies, selectedCompany }) {
                     />
                     <YAxis tick={{ fontSize: 9, fill: "#708098" }} width={52} />
                     <Tooltip
-                      content={activeStatement === "balance" ? <BalanceTooltip /> : undefined}
                       formatter={compactNumber}
                       contentStyle={{
                         fontSize: 10,
@@ -879,11 +799,13 @@ function FinancialView({ companies, selectedCompany }) {
                     />
                     <Legend
                       wrapperStyle={{ fontSize: 9 }}
-                      payload={activeStatement === "balance" ? [
-                        { value: "총자산", type: "line", color: "#2f76d8" },
-                        { value: "부채", type: "square", color: "#ef765c" },
-                        { value: "자본", type: "square", color: "#5fad3f" },
-                      ] : undefined}
+                      content={activeStatement === "balance" ? () => (
+                        <div style={{ display: "flex", justifyContent: "center", gap: 10, fontSize: 9 }}>
+                          {[["자산", "#2475e8"], ["부채", "#ef765c"], ["자본", "#75bd45"]].map(([label, color]) => (
+                            <span key={label} style={{ color, display: "inline-flex", alignItems: "center", gap: 4 }}><i style={{ width: 10, height: 10, background: color, display: "inline-block" }} />{label}</span>
+                          ))}
+                        </div>
+                      ) : undefined}
                     />
                     {activeStatement === "income" && (
                       <>
@@ -891,52 +813,49 @@ function FinancialView({ companies, selectedCompany }) {
                           dataKey="revenue"
                           name="매출액"
                           fill="#2475e8"
-                          barSize={16}
                           radius={[3, 3, 0, 0]}
                         >
                           <LabelList
                             dataKey="revenue"
                             position="top"
                             offset={7}
-                            formatter={compactNumber}
-                            fill="#1f61c9"
-                            fontSize={8}
-                            fontWeight={800}
+                            formatter={formatChartAmount}
+                            fill="#1e62cf"
+                            fontSize={8.5}
+                            fontWeight={700}
                           />
                         </Bar>
                         <Bar
                           dataKey="operating_income"
                           name="영업이익"
                           fill="#ef765c"
-                          barSize={16}
                           radius={[3, 3, 0, 0]}
                         >
                           <LabelList
                             dataKey="operating_margin"
-                            content={renderBarRateLabel("#c9543d", 9)}
+                            content={renderBarMarginLabel("#c9543d")}
                           />
                         </Bar>
                         <Bar
                           dataKey="net_income"
                           name="순이익"
                           fill="#75bd45"
-                          barSize={16}
                           radius={[3, 3, 0, 0]}
                         >
                           <LabelList
                             dataKey="net_margin"
-                            content={renderBarRateLabel("#4d912b", 22)}
+                            content={renderBarMarginLabel("#4d912b")}
                           />
                         </Bar>
                       </>
                     )}
                     {activeStatement === "balance" && (
                       <>
-                        <Bar dataKey="liabilities" name="부채" stackId="capital" fill="#ef765c">
+                        <Bar dataKey="assets" name="자산" fill="#2475e8">
+                          <LabelList dataKey="assets" position="top" offset={7} formatter={(value) => value == null ? "" : `${Math.round(Number(value)).toLocaleString("ko-KR")}억`} fill="#1e62cf" fontSize={8.5} fontWeight={700} />
                         </Bar>
-                        <Bar dataKey="equity" name="자본" stackId="capital" fill="#5fad3f" radius={[4, 4, 0, 0]}>
-                        </Bar>
-                        <Line dataKey="assets" name="총자산" type="linear" stroke="#2f76d8" strokeWidth={2.5} dot={{ r: 3, fill: "#ffffff", strokeWidth: 2 }} activeDot={{ r: 5 }} />
+                        <Bar dataKey="liabilities" name="부채" fill="#ef765c" />
+                        <Bar dataKey="equity" name="자본" fill="#75bd45" />
                       </>
                     )}
                     {activeStatement === "cashflow" && (
@@ -945,20 +864,17 @@ function FinancialView({ companies, selectedCompany }) {
                           dataKey="operating_cf"
                           name="영업CF"
                           fill="#2475e8"
-                          barSize={16}
-                        ><LabelList dataKey="operating_cf" content={renderCashAmountLabel("#1f61c9")} /></Bar>
+                        />
                         <Bar
                           dataKey="investing_cf"
                           name="투자CF"
-                          fill="#e39a35"
-                          barSize={16}
-                        ><LabelList dataKey="investing_cf" content={renderCashAmountLabel("#bf781c")} /></Bar>
+                          fill="#8a6de9"
+                        />
                         <Bar
                           dataKey="financing_cf"
                           name="재무CF"
-                          fill="#8a6de9"
-                          barSize={16}
-                        ><LabelList dataKey="financing_cf" content={renderCashAmountLabel("#6d52bb")} /></Bar>
+                          fill="#ef9b34"
+                        />
                       </>
                     )}
                   </ComposedChart>
@@ -967,10 +883,8 @@ function FinancialView({ companies, selectedCompany }) {
             </article>
             <article>
               <h3>
-                {activeStatement === "balance" ? "재무 안정성 지표" : activeStatement === "cashflow" ? "잉여현금흐름(FCF) 및 설비투자(Capex) 추이" : "수익성·성장성 지표"}
-                <small>단위: {activeStatement === "balance" || activeStatement === "income" ? "%" : "억원"}</small>
+                수익성·성장성 지표 <small>단위: %</small>
               </h3>
-              {activeStatement === "cashflow" && <p className="cashflow-color-guide"><span className="capex-dot" />설비투자 규모 <span className="positive-dot" />FCF 흑자·현금 창출 <span className="negative-dot" />FCF 적자·현금 부족</p>}
               <div className="chart-frame">
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart
@@ -984,22 +898,14 @@ function FinancialView({ companies, selectedCompany }) {
                     />
                     <YAxis tick={{ fontSize: 9, fill: "#708098" }} width={42} />
                     <Tooltip
-                      content={activeStatement === "cashflow" ? <CashflowTooltip /> : undefined}
-                      formatter={(value) => value == null || Number.isNaN(Number(value)) ? "-" : `${Number(value).toFixed(1)}%`}
+                      formatter={(value) => (value == null ? "-" : `${value}%`)}
                       contentStyle={{
                         fontSize: 10,
                         borderRadius: 8,
                         borderColor: "#d7e0ec",
                       }}
                     />
-                    <Legend
-                      wrapperStyle={{ fontSize: 9 }}
-                      payload={activeStatement === "cashflow" ? [
-                        { value: "Capex · 설비투자", type: "square", color: "#9fb4ca" },
-                        { value: "FCF 흑자 · 현금 창출", type: "square", color: "#2687d9" },
-                        { value: "FCF 적자 · 현금 부족", type: "square", color: "#e76f51" },
-                      ] : undefined}
-                    />
+                    <Legend wrapperStyle={{ fontSize: 9 }} />
                     {activeStatement === "income" ? (
                       <>
                         <Line
@@ -1037,36 +943,61 @@ function FinancialView({ companies, selectedCompany }) {
                       </>
                     ) : activeStatement === "balance" ? (
                       <>
-                      <ReferenceLine y={100} stroke="#e05252" strokeDasharray="5 5" label={{ value: "안전 기준선 (100%)", position: "right", fill: "#d34b4b", fontSize: 9 }} />
-                      <Line
-                        type="monotone"
-                        dataKey="debt_ratio"
-                        name="부채비율"
-                        stroke="#ef765c"
-                        strokeWidth={2}
-                        dot={{ r: 3 }}
-                      >
-                        <LabelList content={renderRateLabel("#c9543d", -10)} />
-                      </Line>
-                      <Line
-                        type="monotone"
-                        dataKey="borrowing_dependency"
-                        name="차입금의존도"
-                        stroke="#2475e8"
-                        strokeWidth={2}
-                        dot={{ r: 3 }}
-                      >
-                        <LabelList content={renderRateLabel("#1e62cf", 14)} />
-                      </Line>
+                        <Line
+                          type="monotone"
+                          dataKey="debt_ratio"
+                          name="부채비율"
+                          stroke="#ef765c"
+                          strokeWidth={2}
+                          dot={{ r: 3 }}
+                        >
+                          <LabelList content={renderRateLabel("#c9543d", -12)} />
+                        </Line>
+                        <Line
+                          type="monotone"
+                          dataKey="current_ratio"
+                          name="유동비율"
+                          stroke="#2475e8"
+                          strokeWidth={2}
+                          dot={{ r: 3 }}
+                        >
+                          <LabelList content={renderRateLabel("#1e62cf", -16)} />
+                        </Line>
+                        <Line
+                          type="monotone"
+                          dataKey="net_debt_ratio"
+                          name="순차입금비율"
+                          stroke="#35a891"
+                          strokeWidth={2}
+                          dot={{ r: 3 }}
+                        >
+                          <LabelList content={renderRateLabel("#257d6d", 16)} />
+                        </Line>
                       </>
                     ) : (
                       <>
-                        <ReferenceLine y={0} stroke="#8795a8" strokeWidth={1.2} />
-                        <Bar dataKey="capex" name="Capex" fill="#9fb4ca" barSize={18} radius={[3, 3, 0, 0]}><LabelList dataKey="capex" content={renderCashAmountLabel("#718ba4")} /></Bar>
-                        <Bar dataKey="fcf" name="FCF" fill="#2687d9" barSize={18} radius={[3, 3, 0, 0]}>
-                          {chartData.map((row) => <Cell key={row.label} fill={row.fcf >= 0 ? "#2687d9" : "#e76f51"} />)}
-                          <LabelList dataKey="fcf" content={({ value, ...props }) => renderCashAmountLabel(Number(value) >= 0 ? "#1d6cac" : "#c9543d")({ value, ...props })} />
-                        </Bar>
+                        <Line
+                          type="monotone"
+                          dataKey="operating_growth"
+                          name="영업CF 연계 추이"
+                          stroke="#2475e8"
+                          strokeWidth={2}
+                          dot={{ r: 3 }}
+                        >
+                          <LabelList
+                            content={renderRateLabel("#1e62cf", -10)}
+                          />
+                        </Line>
+                        <Line
+                          type="monotone"
+                          dataKey="net_growth"
+                          name="순이익 성장률"
+                          stroke="#75bd45"
+                          strokeWidth={2}
+                          dot={{ r: 3 }}
+                        >
+                          <LabelList content={renderRateLabel("#4d912b", 14)} />
+                        </Line>
                       </>
                     )}
                   </ComposedChart>
@@ -1082,8 +1013,8 @@ function FinancialView({ companies, selectedCompany }) {
             <Building2 /> {data.corp_name} {data.statement_type} 재무제표
           </h2>
           <p>
-            {data.period_label} · OpenDART 기준 · 최근 {chartData.length}개 분기
-            비교
+            {data.period_label} · OpenDART 기준 · 최근 {chartData.length}개
+            {trendFrequency === "quarter" ? " 분기" : " 사업연도"} 비교
             {data.source_corp_name && data.source_corp_name !== data.corp_name
               ? ` · ${data.source_corp_name} ${data.statement_type} 기준`
               : ""}
@@ -1322,7 +1253,7 @@ function StockComparison({ companies, selectedCompany, refreshNonce }) {
   );
 }
 
-function StockView({ companies, selectedCompany }) {
+function LegacyStockView({ companies, selectedCompany }) {
   const [company, setCompany] = useState(selectedCompany || companies[0] || "포스코퓨처엠");
   const [period, setPeriod] = useState("1y");
   const [data, setData] = useState(null);
@@ -1331,7 +1262,6 @@ function StockView({ companies, selectedCompany }) {
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [marketOpen, setMarketOpen] = useState(isKoreanMarketOpen);
-  const [chartMode, setChartMode] = useState("absolute");
   const periods = [
     ["1m", "1개월"],
     ["3m", "3개월"],
@@ -1347,12 +1277,6 @@ function StockView({ companies, selectedCompany }) {
     if (value >= 1000000) return `${(value / 1000000).toFixed(1)}백만주`;
     if (value >= 10000) return `${(value / 10000).toFixed(1)}만주`;
     return `${Number(value).toLocaleString("ko-KR")}주`;
-  };
-  const changeSummary = (day, week, suffix = "%") => {
-    const format = (value) => value == null
-      ? "-"
-      : `${value > 0 ? "+" : ""}${Number(value).toFixed(2)}${suffix}`;
-    return `전일 ${format(day)} · 전주 ${format(week)}`;
   };
   useEffect(() => {
     if (selectedCompany && companies.includes(selectedCompany)) {
@@ -1383,44 +1307,14 @@ function StockView({ companies, selectedCompany }) {
     }, 60000);
     return () => window.clearInterval(timer);
   }, []);
-  const relativeChart = useMemo(() => {
-    const rows = data?.chart || [];
-    if (!rows.length) return [];
-    const first = rows[0];
-    return rows.map((row) => {
-      const peerReturns = (row.peer_prices || []).map((value, index) => {
-        const base = first.peer_prices?.[index];
-        return base ? (value / base - 1) * 100 : null;
-      }).filter((value) => value != null);
-      return {
-        ...row,
-        company_return: first.close ? (row.close / first.close - 1) * 100 : null,
-        kospi_return: first.kospi && row.kospi ? (row.kospi / first.kospi - 1) * 100 : null,
-        peer_return: peerReturns.length ? peerReturns.reduce((sum, value) => sum + value, 0) / peerReturns.length : null,
-      };
-    });
-  }, [data]);
-  const StockPriceTooltip = ({ active, payload, label }) => {
-    if (!active || !payload?.length) return null;
-    const row = payload[0].payload;
-    const items = [
-      ["종가", won(row.close)],
-      ["등락률", percent(row.change_rate)],
-      ["거래량", compactVolume(row.volume)],
-      ["20일선", won(row.ma20)],
-      ["60일선", won(row.ma60)],
-      ["120일선", won(row.ma120)],
-    ];
-    return <div className="stock-tooltip"><strong>{label}</strong><table><tbody>{items.map(([name, value]) => <tr key={name}><th>{name}</th><td>{value}</td></tr>)}</tbody></table></div>;
-  };
   const metrics = data?.listed
     ? [
-        ["현재가", won(data.price), changeSummary(data.day_change_rate, data.week_change_rate), data.day_change_rate],
-        ["52주 고가", won(data.high_52w), `현재가 대비 ${percent((data.price / data.high_52w - 1) * 100)} · 전주 ${percent(data.week_change_rate)}`, data.week_change_rate],
-        ["52주 저가", won(data.low_52w), `저점 대비 ${percent((data.price / data.low_52w - 1) * 100)} · 전주 ${percent(data.week_change_rate)}`, data.week_change_rate],
-        ["거래량", compactVolume(data.volume), changeSummary(data.volume_day_change_rate, data.volume_week_change_rate), data.volume_day_change_rate],
-        ["시가총액", data.market_cap_trillion == null ? "-" : `${Number(data.market_cap_trillion).toFixed(2)}조원`, changeSummary(data.day_change_rate, data.week_change_rate), data.day_change_rate],
-        ["외국인 지분율", data.foreign_rate == null ? "-" : `${Number(data.foreign_rate).toFixed(2)}%`, changeSummary(data.foreign_day_change_pp, data.foreign_week_change_pp, "%p"), data.foreign_day_change_pp],
+        ["현재가", won(data.price), percent(data.change_rate)],
+        ["52주 고가", won(data.high_52w), "연중 가격 상단"],
+        ["52주 저가", won(data.low_52w), "연중 가격 하단"],
+        ["거래량", compactVolume(data.volume), `20일 평균 ${compactVolume(data.average_volume_20d)}`],
+        ["RSI(14)", data.rsi14 == null ? "-" : data.rsi14.toFixed(1), "70 과열 · 30 침체"],
+        ["연환산 변동성", data.volatility == null ? "-" : `${data.volatility.toFixed(1)}%`, "최근 1년 일간 수익률"],
       ]
     : [];
   return (
@@ -1485,11 +1379,11 @@ function StockView({ companies, selectedCompany }) {
       ) : data?.listed ? (
         <>
           <section className="stock-metrics">
-            {metrics.map(([label, value, detail, direction]) => (
+            {metrics.map(([label, value, detail]) => (
               <article key={label}>
                 <span>{label}</span>
                 <strong>{value}</strong>
-                <small className={`${label === "현재가" ? "primary-change" : ""} ${direction < 0 ? "down" : direction > 0 ? "up" : ""}`}>{detail}</small>
+                <small className={label === "현재가" && data.change_rate < 0 ? "down" : ""}>{detail}</small>
               </article>
             ))}
           </section>
@@ -1500,50 +1394,22 @@ function StockView({ companies, selectedCompany }) {
                   <span>{data.stock_code}</span>
                   <h3>{data.corp_name} 주가 추이</h3>
                 </div>
-                <div className="stock-chart-actions">
-                  <div className="stock-chart-mode" aria-label="차트 표시 방식">
-                    <button className={chartMode === "absolute" ? "active" : ""} onClick={() => setChartMode("absolute")}>절대 주가(원)</button>
-                    <button className={chartMode === "relative" ? "active" : ""} onClick={() => setChartMode("relative")}>상대 수익률(%)</button>
-                  </div>
-                  <small>{data.as_of} 종가 기준</small>
-                </div>
+                <small>{data.as_of} 종가 기준</small>
               </div>
               <div className="stock-chart-frame">
-                <div className="stock-price-chart">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart syncId="stock-price-volume" data={relativeChart} margin={{ top: 14, right: 18, bottom: 0, left: 6 }}>
-                      <CartesianGrid stroke="#e5ebf3" vertical={false} />
-                      <XAxis dataKey="date" hide />
-                      <YAxis tick={{ fontSize: 9, fill: "#718198" }} width={58} domain={["auto", "auto"]} tickFormatter={(value) => chartMode === "relative" ? `${Number(value).toFixed(0)}%` : Number(value).toLocaleString("ko-KR")} />
-                      <Tooltip content={<StockPriceTooltip />} />
-                      <Legend wrapperStyle={{ fontSize: 9 }} />
-                      {chartMode === "absolute" ? <>
-                        <Line type="linear" dataKey="close" name="종가" stroke="#2475e8" strokeWidth={2.4} dot={false} />
-                        <Line type="linear" dataKey="ma20" name="20일선" stroke="#34bfa3" strokeWidth={1.4} dot={false} connectNulls />
-                        <Line type="linear" dataKey="ma60" name="60일선" stroke="#f09a43" strokeWidth={1.4} dot={false} connectNulls />
-                        <Line type="linear" dataKey="ma120" name="120일선" stroke="#8c70d9" strokeWidth={1.2} dot={false} connectNulls />
-                      </> : <>
-                        <ReferenceLine y={0} stroke="#9ba9ba" strokeDasharray="4 4" />
-                        <Line type="linear" dataKey="company_return" name={data.corp_name} stroke="#2475e8" strokeWidth={2.5} dot={false} />
-                        <Line type="linear" dataKey="kospi_return" name="KOSPI" stroke="#6b7d92" strokeWidth={1.6} strokeDasharray="6 4" dot={false} connectNulls />
-                        <Line type="linear" dataKey="peer_return" name="피어 평균" stroke="#ef8d3c" strokeWidth={1.6} strokeDasharray="3 4" dot={false} connectNulls />
-                      </>}
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="stock-volume-chart">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart syncId="stock-price-volume" data={relativeChart} margin={{ top: 2, right: 18, bottom: 2, left: 6 }}>
-                      <CartesianGrid stroke="#edf1f6" vertical={false} />
-                      <XAxis dataKey="date" tick={{ fontSize: 8, fill: "#718198" }} minTickGap={35} />
-                      <YAxis tick={{ fontSize: 8, fill: "#718198" }} width={58} tickFormatter={(value) => value >= 1000000 ? `${(value / 1000000).toFixed(0)}M` : `${(value / 1000).toFixed(0)}K`} />
-                      <Bar dataKey="volume" name="거래량" barSize={4}>
-                        {relativeChart.map((row) => <Cell key={row.date} fill={row.change_rate >= 0 ? "#e05252" : "#2475e8"} opacity={0.72} />)}
-                      </Bar>
-                      <Brush dataKey="date" height={14} travellerWidth={7} stroke="#9bb5d8" fill="#f6f9fd" />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </div>
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={data.chart} margin={{ top: 16, right: 18, bottom: 4, left: 6 }}>
+                    <CartesianGrid stroke="#e5ebf3" vertical={false} />
+                    <XAxis dataKey="date" tick={{ fontSize: 9, fill: "#718198" }} minTickGap={35} />
+                    <YAxis tick={{ fontSize: 9, fill: "#718198" }} width={58} domain={["auto", "auto"]} tickFormatter={(value) => Number(value).toLocaleString("ko-KR")} />
+                    <Tooltip formatter={(value, name) => [won(value), name]} contentStyle={{ fontSize: 10, borderRadius: 9, borderColor: "#d7e0ec" }} />
+                    <Legend wrapperStyle={{ fontSize: 9 }} />
+                    <Line type="monotone" dataKey="close" name="종가" stroke="#2475e8" strokeWidth={2.4} dot={false} />
+                    <Line type="monotone" dataKey="ma20" name="20일선" stroke="#34bfa3" strokeWidth={1.4} dot={false} connectNulls />
+                    <Line type="monotone" dataKey="ma60" name="60일선" stroke="#f09a43" strokeWidth={1.4} dot={false} connectNulls />
+                    <Line type="monotone" dataKey="ma120" name="120일선" stroke="#7b55d9" strokeWidth={2.2} strokeDasharray="6 3" dot={false} connectNulls />
+                  </ComposedChart>
+                </ResponsiveContainer>
               </div>
             </article>
             <aside className="stock-insights">
@@ -1599,7 +1465,6 @@ export default function App() {
   );
   const [selectedCompany, setSelectedCompany] = useState("");
   const [status, setStatus] = useState({ dart: false, ai: false });
-  const [market, setMarket] = useState({ materials: [], fx: null, stocks: [] });
   const [data, setData] = useState({
     disclosures: [],
     news: [],
@@ -1610,6 +1475,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [modalLoading, setModalLoading] = useState(false);
   const [briefingLoading, setBriefingLoading] = useState(false);
+  const [feedError, setFeedError] = useState("");
+  const refreshAbortRef = useRef(null);
   useEffect(() => {
     localStorage.setItem("radar-companies", JSON.stringify(companies));
   }, [companies]);
@@ -1619,37 +1486,29 @@ export default function App() {
       .then(setStatus)
       .catch(() => {});
   }, []);
-  const refreshMarket = async () => {
-    const stockCompanies = ["포스코퓨처엠", "에코프로비엠", "엘앤에프"];
-    const results = await Promise.allSettled([
-      api.materials(),
-      api.exchangeRate(),
-      ...stockCompanies.map((company) => api.stockAnalysis(company, "1m")),
-    ]);
-    setMarket({
-      materials: results[0].status === "fulfilled" ? results[0].value.items || [] : [],
-      fx: results[1].status === "fulfilled" ? results[1].value : null,
-      stocks: results.slice(2).map((result, index) => result.status === "fulfilled"
-        ? result.value
-        : { corp_name: stockCompanies[index], price: null, change_rate: null }),
-    });
-  };
-  const refresh = async () => {
+  const refresh = async (force = false) => {
+    // 회사 목록을 빠르게 바꾸면 이전 요청이 늦게 도착해 최신 응답을 덮어쓸 수 있어 취소합니다.
+    refreshAbortRef.current?.abort();
+    const controller = new AbortController();
+    refreshAbortRef.current = controller;
     setLoading(true);
+    setFeedError("");
     try {
-      const [intelligence] = await Promise.all([
-        api.intelligence(companies),
-        refreshMarket(),
-      ]);
-      setData(intelligence);
+      setData(
+        await api.intelligence(companies, {
+          signal: controller.signal,
+          force: force === true,
+        }),
+      );
     } catch (error) {
-      alert(error.message);
+      if (error.name !== "AbortError") setFeedError(error.message);
     } finally {
-      setLoading(false);
+      if (refreshAbortRef.current === controller) setLoading(false);
     }
   };
   useEffect(() => {
     if (companies.length) refresh();
+    return () => refreshAbortRef.current?.abort();
   }, [companies]);
   const filtered = useMemo(
     () => ({
@@ -1674,7 +1533,7 @@ export default function App() {
       });
       setAiResult(result);
     } catch (error) {
-      alert(error.message);
+      setFeedError(error.message);
       setAiResult(item.ai || EMPTY_AI);
     } finally {
       setModalLoading(false);
@@ -1693,7 +1552,7 @@ export default function App() {
       setAiResult(result);
     } catch (error) {
       setAiResult(item.ai || EMPTY_AI);
-      alert(error.message);
+      setFeedError(error.message);
     } finally {
       setBriefingLoading(false);
     }
@@ -1715,13 +1574,43 @@ export default function App() {
         }}
       />
       <main className={collapsed ? "wide" : ""}>
-        <Header status={status} market={market} disclosures={data.disclosures} news={data.news} showTicker={view === "intel"} />
+        <Header status={status} />
         {view === "intel" ? (
           <>
+            <section className={`company-focus ${selectedCompany ? "active" : ""}`}>
+              <div>
+                <span>SELECTED COMPANY</span>
+                <strong>{selectedCompany || "전체 모니터링 기업"}</strong>
+              </div>
+              <p>
+                {selectedCompany
+                  ? `${selectedCompany} 공시 ${filtered.disclosures.length}건 · 뉴스 ${filtered.news.length}건을 표시합니다.`
+                  : `전체 공시 ${filtered.disclosures.length}건 · 뉴스 ${filtered.news.length}건을 표시합니다.`}
+              </p>
+              {selectedCompany && (
+                <button onClick={() => setSelectedCompany("")}>전체 보기</button>
+              )}
+            </section>
             <DailyBriefing
               lines={data.daily_briefing || []}
               loading={loading}
             />
+            {feedError && (
+              <div className="feed-error" role="alert">
+                <span>{feedError}</span>
+                <button type="button" onClick={() => refresh(true)}>
+                  다시 시도
+                </button>
+                <button
+                  type="button"
+                  className="feed-error-dismiss"
+                  onClick={() => setFeedError("")}
+                  aria-label="오류 메시지 닫기"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
             <div className="filter-summary">
               {selectedCompany ? (
                 <>
@@ -1765,7 +1654,7 @@ export default function App() {
             selectedCompany={selectedCompany}
           />
         ) : (
-          <StockView
+          <StockExecutiveView
             companies={companies}
             selectedCompany={selectedCompany}
           />

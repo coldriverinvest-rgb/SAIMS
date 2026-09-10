@@ -1,10 +1,18 @@
 """FUTURE:M RADAR backend configuration."""
+import logging
 import os
 from pathlib import Path
 from dotenv import load_dotenv
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT_DIR / ".env")
+
+# 서비스 계층의 예외를 조용히 삼키지 않도록 공용 로거 설정을 한 번만 적용합니다.
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 
 DART_API_KEY = os.getenv("DART_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -38,3 +46,9 @@ COMPETITORS = ["포스코홀딩스", "LG화학", "에코프로비엠", "엘앤�
 CUSTOMERS = ["LG에너지솔루션", "삼성SDI", "SK온", "현대차"]
 DEFAULT_COMPANIES = OWN_COMPANIES + COMPETITORS + CUSTOMERS
 DART_COLUMNS = ["rcept_dt", "corp_name", "report_nm", "rcept_no", "url"]
+
+# OpenDART 검색어와 실제 등록 법인명이 다른 경우의 매핑. 여러 서비스가 공유합니다.
+CORPORATE_NAME_ALIASES = {"현대차": "현대자동차", "SK온": "에스케이온"}
+
+# /api/intelligence 응답 캐시 수명(초). 0이면 매 요청마다 외부 소스를 다시 조회합니다.
+INTELLIGENCE_CACHE_SECONDS = max(0, int(os.getenv("INTELLIGENCE_CACHE_SECONDS", "300")))

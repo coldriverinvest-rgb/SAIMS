@@ -1,14 +1,16 @@
+import logging
 from datetime import datetime, timedelta
-import OpenDartReader
 import pandas as pd
-from backend.config import DART_API_KEY, DART_COLUMNS
+from backend.config import CORPORATE_NAME_ALIASES, DART_COLUMNS
+from backend.services.dart_client import get_dart
+
+logger = logging.getLogger(__name__)
 
 MAJOR_DISCLOSURE_TERMS = (
     "단일판매·공급계약체결", "단일판매ㆍ공급계약체결", "단일판매·공급계약해지", "단일판매ㆍ공급계약해지",
     "신규시설투자", "타법인주식및출자증권취득결정", "유상증자", "영업양수도", "유형자산취득",
     "타인에대한채무보증결정", "소송등의제기", "연결재무제표기준영업(잠정)실적",
 )
-CORPORATE_NAME_ALIASES = {"SK온": "에스케이온"}
 
 def safe_text(value, default="") -> str:
     if value is None: return default
@@ -27,10 +29,11 @@ def normalize(raw) -> pd.DataFrame:
     return frame[DART_COLUMNS].drop_duplicates("rcept_no")
 
 def fetch_disclosures(corp_name: str, days: int = 30) -> list[dict]:
-    if not DART_API_KEY: return []
+    dart = get_dart()
+    if dart is None: return []
     try:
         dart_name = CORPORATE_NAME_ALIASES.get(corp_name, corp_name)
-        dart, today = OpenDartReader(DART_API_KEY), datetime.now().date()
+        today = datetime.now().date()
         start = today - timedelta(days=max(days - 1, 0))
         frame = normalize(dart.list(dart_name, start.strftime("%Y-%m-%d"), today.strftime("%Y-%m-%d")))
         if frame.empty:
@@ -41,12 +44,15 @@ def fetch_disclosures(corp_name: str, days: int = 30) -> list[dict]:
             record["is_major"] = any(term in record["report_nm"].replace(" ", "") for term in MAJOR_DISCLOSURE_TERMS)
             record["major_label"] = "주요" if record["is_major"] else ""
         return records
-    except Exception: return []
+    except Exception:
+        logger.warning("DART 공시 조회 실패: %s", corp_name, exc_info=True)
+        return []
 
 def validate_company(query: str) -> dict:
-    if not DART_API_KEY or not query.strip(): return {"valid":False,"message":"기업명을 입력해 주세요."}
+    dart = get_dart()
+    if dart is None or not query.strip(): return {"valid":False,"message":"기업명을 입력해 주세요."}
     try:
-        codes = OpenDartReader(DART_API_KEY).corp_codes.copy()
+        codes = dart.corp_codes.copy()
         codes["corp_name"] = codes["corp_name"].fillna("").astype(str).str.strip()
         codes["stock_code"] = codes["stock_code"].fillna("").astype(str).str.strip()
         value = query.strip(); stock = value.zfill(6) if value.isdigit() else value
@@ -56,4 +62,6 @@ def validate_company(query: str) -> dict:
             row = listed.iloc[0]; return {"valid":True,"corp_name":safe_text(row["corp_name"]),"stock_code":safe_text(row["stock_code"])}
         suggestions = codes[codes["corp_name"].str.contains(value,case=False,regex=False) & (codes["stock_code"].str.len()==6)]["corp_name"].head(3).tolist()
         return {"valid":False,"message":"정확한 상장기업명을 입력해 주세요." + (f" 검색 결과: {', '.join(suggestions)}" if suggestions else "")}
-    except Exception: return {"valid":False,"message":"OpenDART에서 기업 정보를 확인하지 못했습니다."}
+    except Exception:
+        logger.warning("OpenDART 기업 검증 실패: %s", query, exc_info=True)
+        return {"valid":False,"message":"OpenDART에서 기업 정보를 확인하지 못했습니다."}

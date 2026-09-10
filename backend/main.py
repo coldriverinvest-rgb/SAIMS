@@ -6,17 +6,17 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from backend.config import ADMIN_PASSWORD, ALERT_POLL_SECONDS, DART_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY
-from backend.schemas import AnalyzeRequest, DeepDiveRequest, DeepDiveResponse, ExecutiveBriefingResponse, RecipientCreate, RecipientUpdate, TelegramRequest
+from backend.config import ADMIN_PASSWORD, ALERT_POLL_SECONDS, DART_API_KEY, GEMINI_API_KEY, INTELLIGENCE_CACHE_SECONDS, OPENAI_API_KEY
+from backend.schemas import AnalyzeRequest, RecipientCreate, RecipientUpdate, TelegramRequest
+from backend.services.cache import TTLCache
 from backend.services.alert_monitor import alert_monitor_loop, scan_important_disclosures
-from backend.services.ai_service import analyze, deep_dive_signal, generate_executive_briefing, make_source_id
+from backend.services.ai_service import analyze
 from backend.services.dart_service import fetch_disclosures, validate_company
 from backend.services.disclosure_text_service import fetch_disclosure_text
 from backend.services.finance_service import fetch_financials, normalize_quarterly_history, quarterly_periods
-from backend.services.news_service import MATERIAL_NEWS, fetch_material_news, fetch_news
+from backend.services.news_service import fetch_news
 from backend.services.stock_service import fetch_stock_analysis
 from backend.services.komis_service import material_prices, material_monitor_loop
-from backend.services.market_service import fetch_usd_krw
 from backend.services.recipient_service import add_recipient, delete_recipient, initialize_database, list_recipients, update_recipient
 from backend.services.telegram_service import get_bot_status, get_recent_chats, send_alert
 from backend.services.email_service import get_email_status, send_email_alert
@@ -44,18 +44,6 @@ app.add_middleware(CORSMiddleware,allow_origins=["http://localhost:5173","http:/
 @app.get('/api/materials')
 def materials():
     return material_prices()
-@app.get('/api/materials/news')
-def material_news(material: str = Query(...)):
-    if material not in MATERIAL_NEWS:
-        raise HTTPException(status_code=400, detail="지원하지 않는 원자재입니다.")
-    return {"material": material, "items": fetch_material_news(material)}
-
-@app.get('/api/market/exchange-rate')
-def exchange_rate():
-    result = fetch_usd_krw()
-    if not result:
-        raise HTTPException(status_code=502, detail="원/달러 환율을 불러오지 못했습니다.")
-    return result
 
 def build_daily_briefing(disclosures: list[dict], news: list[dict]) -> list[str]:
     signals = []
@@ -155,9 +143,17 @@ def admin_test_recipient(recipient_id: int):
 def admin_scan_alerts():
     return scan_important_disclosures()
 
+_intelligence_cache = TTLCache(INTELLIGENCE_CACHE_SECONDS)
+
 @app.get("/api/intelligence")
-def intelligence(companies: str=Query(...,min_length=1)):
-    company_list=list(dict.fromkeys(x.strip() for x in companies.split(",") if x.strip()))[:20]; disclosures=[]; news=[]
+def intelligence(companies: str=Query(...,min_length=1), refresh: bool=False):
+    company_list=list(dict.fromkeys(x.strip() for x in companies.split(",") if x.strip()))[:20]
+    cache_key=",".join(sorted(company_list))
+    if not refresh:
+        cached=_intelligence_cache.get(cache_key)
+        if cached is not None:
+            return cached
+    disclosures=[]; news=[]
     with ThreadPoolExecutor(max_workers=min(10,max(2,len(company_list)*2))) as executor:
         jobs={}
         for company in company_list:
@@ -166,54 +162,9 @@ def intelligence(companies: str=Query(...,min_length=1)):
             try: (disclosures if jobs[future]=="dart" else news).extend(future.result())
             except Exception: continue
     disclosures.sort(key=lambda x:x.get("rcept_dt",""),reverse=True); news.sort(key=lambda x:x.get("time",""),reverse=True)
-    for index, item in enumerate(disclosures):
-        item["source_id"] = make_source_id({**item, "source_type": "DART"}, index)
-    for index, item in enumerate(news):
-        item["source_id"] = make_source_id({**item, "source_type": "NEWS"}, index)
-    return {"disclosures":disclosures,"news":news,"daily_briefing":build_daily_briefing(disclosures,news)}
-
-
-@app.get("/api/intelligence/executive-briefing", response_model=ExecutiveBriefingResponse)
-def executive_briefing(companies: str = Query(default="포스코퓨처엠,에코프로비엠,엘앤에프,LG화학")):
-    company_list = list(dict.fromkeys(name.strip() for name in companies.split(",") if name.strip()))[:12]
-    collected = intelligence(",".join(company_list))
-    raw_sources = []
-    for item in collected["disclosures"][:24]:
-        raw_sources.append({
-            "source_id": item["source_id"], "source_type": "DART", "rcept_no": item.get("rcept_no"),
-            "company": item.get("corp_name"), "title": item.get("report_nm"), "date": item.get("rcept_dt"),
-            "content": item.get("text") or item.get("report_nm") or "", "url": item.get("url"),
-        })
-    for item in collected["news"][:30]:
-        raw_sources.append({
-            "source_id": item["source_id"], "source_type": "NEWS", "company": item.get("corp_name"),
-            "title": item.get("title"), "date": item.get("time"),
-            "content": item.get("summary") or item.get("text") or item.get("title") or "", "url": item.get("link"),
-        })
-    try:
-        for item in material_prices().get("items", []):
-            if item.get("price") is None:
-                continue
-            raw_sources.append({
-                "source_id": make_source_id({"source_type": "KOMIS", "material": item.get("id")}),
-                "source_type": "KOMIS", "material": item.get("id"), "title": f"{item.get('name')} 공개 가격",
-                "date": item.get("date"), "content": f"가격 {item.get('price')} {item.get('unit')}; 전일 대비 {item.get('change_pct')}%",
-                "figures": {"price": item.get("price"), "unit": item.get("unit"), "change_pct": item.get("change_pct")},
-            })
-    except Exception:
-        pass
-    return generate_executive_briefing(raw_sources)
-
-
-@app.post("/api/intelligence/deep-dive", response_model=DeepDiveResponse)
-def intelligence_deep_dive(payload: DeepDiveRequest):
-    if payload.signal_id.startswith("DART-") and len(payload.raw_content.strip()) < 300:
-        rcept_no = payload.signal_id.removeprefix("DART-")
-        disclosure_text = fetch_disclosure_text(rcept_no)
-        if disclosure_text:
-            update = {"raw_content": disclosure_text}
-            payload = payload.model_copy(update=update) if hasattr(payload, "model_copy") else payload.copy(update=update)
-    return deep_dive_signal(payload)
+    payload={"disclosures":disclosures,"news":news,"daily_briefing":build_daily_briefing(disclosures,news)}
+    _intelligence_cache.set(cache_key,payload)
+    return payload
 
 @app.get("/api/companies/validate")
 def company_validate(name: str):
@@ -232,13 +183,15 @@ def financials(corp_name: str, year: int | None = None, report_code: str | None 
     return result
 
 @app.get("/api/financials/{corp_name}/history")
-def financial_history(corp_name: str, report_code: str = "11011", end_year: int | None = None, quarters: int = 8, fs_div: str = "CFS"):
+def financial_history(corp_name: str, report_code: str = "11011", end_year: int | None = None, quarters: int = 8, years: int = 6, frequency: str = "quarter", fs_div: str = "CFS"):
     if report_code not in {"11013", "11012", "11014", "11011"}:
         raise HTTPException(status_code=400, detail="지원하지 않는 보고서 구분입니다.")
     if fs_div not in {"CFS", "OFS"}:
         raise HTTPException(status_code=400, detail="지원하지 않는 재무제표 구분입니다.")
+    if frequency not in {"quarter", "annual"}:
+        raise HTTPException(status_code=400, detail="지원하지 않는 추이 기준입니다.")
     target_end = end_year or datetime.now().year
-    target_periods = quarterly_periods(target_end, report_code, min(max(quarters, 4), 12))
+    target_periods = quarterly_periods(target_end, report_code, min(max(quarters, 4), 12)) if frequency == "quarter" else [(year, "11011") for year in range(target_end - min(max(years, 2), 7) + 1, target_end + 1)]
     results = []
     with ThreadPoolExecutor(max_workers=min(8, len(target_periods))) as executor:
         jobs = {executor.submit(fetch_financials, corp_name, year, code, fs_div): (year, code) for year, code in target_periods}
@@ -247,7 +200,10 @@ def financial_history(corp_name: str, report_code: str = "11011", end_year: int 
                 item = future.result()
                 if item: results.append(item)
             except Exception: continue
-    return {"corp_name": corp_name, "report_code": report_code, "fs_div": fs_div, "items": normalize_quarterly_history(results)}
+    items = normalize_quarterly_history(results) if frequency == "quarter" else sorted(results, key=lambda item: item["year"])
+    if frequency == "annual":
+        items = [{**item, "quarter_label": f"{item['year']} 연간"} for item in items]
+    return {"corp_name": corp_name, "report_code": report_code, "fs_div": fs_div, "frequency": frequency, "items": items}
 
 @app.get("/api/stocks/{corp_name}")
 def stock_analysis(corp_name: str, period: str = "1y"):

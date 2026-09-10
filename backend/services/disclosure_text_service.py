@@ -1,10 +1,13 @@
+import logging
 import re
 from html.parser import HTMLParser
 
-import OpenDartReader
 import requests
 
 from backend.config import DART_API_KEY
+from backend.services.dart_client import get_dart
+
+logger = logging.getLogger(__name__)
 
 
 class DisclosureHTMLParser(HTMLParser):
@@ -61,10 +64,13 @@ def fetch_disclosure_text(rcept_no: str) -> str:
     if not DART_API_KEY or not rcept_no:
         return ""
     html = ""
-    try:
-        html = OpenDartReader(DART_API_KEY).document(rcept_no)
-    except Exception:
-        html = ""
+    dart = get_dart()
+    if dart is not None:
+        try:
+            html = dart.document(rcept_no)
+        except Exception:
+            logger.debug("DART document() 실패, 뷰어 파싱으로 대체: %s", rcept_no, exc_info=True)
+            html = ""
     if not html:
         try:
             page = requests.get(
@@ -97,6 +103,7 @@ def fetch_disclosure_text(rcept_no: str) -> str:
                     break
             html = "\n".join(sections)
         except Exception:
+            logger.warning("DART 뷰어 본문 수집 실패: %s", rcept_no, exc_info=True)
             html = ""
     if not html:
         return ""
@@ -107,4 +114,5 @@ def fetch_disclosure_text(rcept_no: str) -> str:
         text = re.sub(r"\n{3,}", "\n\n", text)
         return focus_relevant_text(text)
     except Exception:
+        logger.warning("공시 본문 파싱 실패: %s", rcept_no, exc_info=True)
         return ""
