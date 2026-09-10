@@ -9,3 +9,16 @@
 .material-cards small{grid-column:1/-1}
 @media(max-width:1100px){.material-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:480px){.materials-widget{padding:12px}.material-cards{gap:8px}.material-cards button{padding:10px;gap:3px 5px}.material-cards strong{font-size:19px}.material-cards b{font-size:10px}}
+/* Executive summary density: keep all four prices visible without pushing news below the fold. */
+.materials-widget--compact{padding:12px 16px}
+.materials-widget--compact header h3{margin:3px 0;font-size:15px}
+.materials-widget--compact header p{margin:2px 0}
+.materials-widget--compact>p[role="status"]{margin:5px 0 0;font-size:9px}
+.materials-widget--compact .material-cards{margin-top:7px;gap:8px}
+.materials-widget--compact .material-cards button{min-height:76px;padding:8px 12px;grid-template-areas:"name change" "price change" "unit date";grid-template-rows:auto auto auto}
+.materials-widget--compact .material-cards button>span{grid-area:name;font-size:11px}
+.materials-widget--compact .material-cards button>strong{grid-area:price;font-size:19px;line-height:1;margin:2px 0}
+.materials-widget--compact .material-cards button>b{grid-area:change;font-size:11px;margin:0;align-self:center}
+.materials-widget--compact .material-cards button>small:first-of-type{grid-area:unit}
+.materials-widget--compact .material-cards button>small:last-child{grid-area:date;text-align:right;white-space:nowrap}
+.materials-widget--compact .material-news{margin-top:10px;padding-top:10px}

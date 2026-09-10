@@ -325,7 +325,7 @@ function DisclosurePanel({ items, loading, onAnalyze }) {
   const [keyOnly, setKeyOnly] = useState(true);
   const keyPattern = /투자|시설|CAPEX|인수|합병|M&A|수주|공급계약|유상증자|무상증자|증자|특허|소송|잠정실적|영업실적|매출액.*변경|금전대여|차입/i;
   const routinePattern = /임원.*소유|주식등의대량보유|주주총회결과|최대주주.*변경이 없는|소유상황보고/i;
-  const executiveItems = items.map((item) => ({ ...item, isKeyExecutiveIssue: item.is_major || (keyPattern.test(item.report_nm || "") && !routinePattern.test(item.report_nm || "")), keyMetrics: item.key_metrics || ((item.report_nm || "").match(/\d[\d,.]*\s*(?:조|억|만)?\s*원|\d+(?:\.\d+)?%/g) || []).slice(0, 2).join(" · ") }));
+  const executiveItems = items.map((item) => ({ ...item, isKeyExecutiveIssue: item.is_major || (keyPattern.test(item.report_nm || "") && !routinePattern.test(item.report_nm || "")) }));
   const visibleItems = keyOnly ? executiveItems.filter((item) => item.isKeyExecutiveIssue) : executiveItems;
   return (
     <section className="panel">
@@ -345,14 +345,13 @@ function DisclosurePanel({ items, loading, onAnalyze }) {
                 <th>접수일</th>
                 <th>기업</th>
                 <th>보고서 제목</th>
-                <th>핵심 수치 / 요약</th>
                 <th>AI 액션</th>
               </tr>
             </thead>
             <tbody>
               {visibleItems.length ? (
                 visibleItems.map((item) => (
-                  <tr key={item.rcept_no} title={`${item.corp_name} · ${item.report_nm}${item.keyMetrics ? ` · ${item.keyMetrics}` : ""}`}>
+                  <tr key={item.rcept_no} title={`${item.corp_name} · ${item.report_nm}`}>
                     <td>{item.rcept_dt}</td>
                     <td>{item.corp_name}</td>
                     <td>
@@ -370,7 +369,6 @@ function DisclosurePanel({ items, loading, onAnalyze }) {
                         </a>
                       </div>
                     </td>
-                    <td><span className="metric-chip">{item.keyMetrics || "전략 영향 AI 요약"}</span></td>
                     <td>
                       <button
                         className="text-button"
@@ -391,7 +389,7 @@ function DisclosurePanel({ items, loading, onAnalyze }) {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="5" className="empty">
+                  <td colSpan="4" className="empty">
                     핵심 경영 공시가 없습니다. 토글을 끄면 전체 공시를 볼 수 있습니다.
                   </td>
                 </tr>
@@ -430,7 +428,6 @@ function NewsPanel({ items, loading, onSelect }) {
             const isOpen = expanded[cluster.id];
             return <article className="news-cluster" key={cluster.id}>
               <div className="news-cluster-top"><span className={`value-sentiment ${cluster.sentiment.toLowerCase()}`}>{cluster.sentiment === "POSITIVE" ? "긍정 / 기회" : cluster.sentiment === "RISK" ? "리스크 / 부정" : "중립"}</span><small>{item.corp_name}</small></div>
-              <strong className="topic-title">{cluster.topicTitle}</strong>
               <div className="news-cluster-main"><div className="news-copy"><strong>{item.title}</strong><small>{item.source} · {item.time}</small></div><div className="row-actions"><a href={item.link} target="_blank" rel="noreferrer"><ExternalLink/> 원문</a><button onClick={() => onSelect({ ...item, type: "news", text: item.summary })}>브리핑</button></div></div>
               {cluster.relatedArticles.length > 0 && <><button className="cluster-toggle" onClick={() => setExpanded((state) => ({...state, [cluster.id]: !isOpen}))}>외 관련 기사 {cluster.relatedArticles.length}건 {isOpen ? "접기 ▲" : "펼치기 ▼"}</button>{isOpen && <div className="related-articles">{cluster.relatedArticles.map((related, index) => <a key={`${related.link}-${index}`} href={related.link} target="_blank" rel="noreferrer"><span>{related.title}</span><small>{related.source} · {related.time}</small></a>)}</div>}</>}
             </article>;

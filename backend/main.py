@@ -17,6 +17,7 @@ from backend.services.finance_service import fetch_financials, normalize_quarter
 from backend.services.news_service import fetch_news
 from backend.services.stock_service import fetch_stock_analysis
 from backend.services.komis_service import material_prices, material_monitor_loop
+from backend.services.material_news_service import fetch_material_news
 from backend.services.recipient_service import add_recipient, delete_recipient, initialize_database, list_recipients, update_recipient
 from backend.services.telegram_service import get_bot_status, get_recent_chats, send_alert
 from backend.services.email_service import get_email_status, send_email_alert
@@ -44,6 +45,13 @@ app.add_middleware(CORSMiddleware,allow_origins=["http://localhost:5173","http:/
 @app.get('/api/materials')
 def materials():
     return material_prices()
+
+@app.get('/api/materials/{material_id}/news')
+def material_news(material_id: str):
+    try:
+        return {"material_id": material_id, "items": fetch_material_news(material_id)}
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 def build_daily_briefing(disclosures: list[dict], news: list[dict]) -> list[str]:
     signals = []

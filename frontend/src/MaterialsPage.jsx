@@ -25,12 +25,11 @@ export default function MaterialsPage() {
   const item=data?.items.find(x=>x.id===selected);
   const cutoff=new Date();cutoff.setDate(cutoff.getDate()-days);
   const points=(item?.history || []).filter(x=>new Date(x.date)>=cutoff);
-  return <section className="materials-widget">
+  return <section className="materials-widget materials-widget--compact">
     <header><div><span>BATTERY MATERIALS / PRICE MONITOR</span><h3>원자재 가격 동향</h3><p>KOMIS 공개 시세 · 서버가 1시간마다 자동 수집 · 실시간 체결가 아님</p></div><button disabled={busy} onClick={refresh}>{busy?'조회 중…':'↻ 저장 가격 새로고침'}</button></header>
     {(error || data?.error) && <p role="status">{error || data.error}</p>}
     {!data && <p>{busy?'KOMIS 수집 가격을 확인하고 있습니다.':'데이터 대기 중'}</p>}
     <p role="status">{data?.collecting ? '백엔드 수집 진행 중…' : data?.checked_at ? `최근 수집 시도 ${new Date(data.checked_at).toLocaleString('ko-KR')}` : '서버 시작 후 첫 수집 대기 중'}</p><div className="material-cards">{data?.items.map(m=><button key={m.id} className={selected===m.id?'selected':''} onClick={()=>setSelected(m.id)}><span>{m.name}</span><strong>{m.price===null?'—':m.price.toLocaleString('en-US',{maximumFractionDigits:2})}</strong><small>{m.price===null?'공개 데이터 미연결':m.unit}</small><b className={m.change_pct>0?'up':'down'}>{m.change_pct===null?'가격 확인 필요':`${m.change_pct>0?'+':''}${m.change_pct.toFixed(2)}%`}</b><small>{m.date?`가격 기준 ${m.date}`:'KOMIS 공개 시세 미확인'}</small></button>)}</div>
-    <p>품목별 통화·중량 단위와 가격 규격을 확인하세요. 아래 기간은 확보된 이력 범위 내에서 표시됩니다.</p>
     <section className="material-news">
       <div className="material-news-head"><div><span>MINERAL MARKET INTELLIGENCE</span><h3>{item?.name || '원자재'} 광물시장 주요 뉴스</h3><p>배터리 일반 뉴스는 제외하고 광산·채굴·제련·생산·재고·수출입·가격 이슈만 선별합니다.</p></div><small>{newsBusy?'뉴스 추출 중…':`${news.length}건`}</small></div>
       {newsError&&<div className="material-news-empty">{newsError}</div>}
