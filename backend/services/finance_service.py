@@ -91,6 +91,7 @@ def fetch_financials(corp_name: str, year: int | None = None, report_code: str |
     capex=pick(statement,["ifrs-full_PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities","ifrs_PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities","dart_PurchaseOfPropertyPlantAndEquipment"],True)
     fcf=operating_cf-capex if operating_cf is not None and capex is not None else None
     borrowing_dependency=ratio(borrowings,assets)
+    receipt=safe_text(statement.iloc[0].get("rcept_no")); debt_ratio=ratio(liabilities,equity); current_ratio=ratio(current_assets,current_liabilities); net_debt_ratio=ratio(net_debt,equity); operating_margin=ratio(operating,revenue); net_margin=ratio(net,revenue); roe=ratio(net,equity); roa=ratio(net,assets)
     return {
         "corp_name": corp_name,
         "fs_div": fs_div,
@@ -103,7 +104,6 @@ def fetch_financials(corp_name: str, year: int | None = None, report_code: str |
         "revenue": to_eok(revenue), "operating_income": to_eok(operating), "net_income": to_eok(net),
         "assets": to_eok(assets), "liabilities": to_eok(liabilities), "equity": to_eok(equity), "current_assets": to_eok(current_assets), "current_liabilities": to_eok(current_liabilities), "borrowings": to_eok(borrowings), "net_debt": to_eok(net_debt),
         "operating_cf": to_eok(operating_cf), "investing_cf": to_eok(investing_cf),
-        "financing_cf": to_eok(financing_cf), "cash": to_eok(cash),
         "financing_cf": to_eok(financing_cf), "cash": to_eok(cash), "capex": to_eok(capex), "fcf": to_eok(fcf),
         "cf_operating": to_eok(operating_cf), "cf_investing": to_eok(investing_cf), "cf_financing": to_eok(financing_cf),
         "debt_ratio": debt_ratio, "current_ratio": current_ratio, "net_debt_ratio": net_debt_ratio, "borrowing_dependency": borrowing_dependency, "operating_margin": operating_margin, "net_margin": net_margin, "roe": roe, "roa": roa,
