@@ -12,3 +12,7 @@ frontend/node_modules/
 frontend/dist/
 .vite/
 data/
+
+# 발표자료 빌드 중간 산출물 (슬라이드 PNG·후보 파일) — 결과물은 presentation-output/ 에만 보관
+presentation-build/
+presentation-build-v2/

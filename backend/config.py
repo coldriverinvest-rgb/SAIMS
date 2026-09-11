@@ -48,7 +48,8 @@ DEFAULT_COMPANIES = OWN_COMPANIES + COMPETITORS + CUSTOMERS
 DART_COLUMNS = ["rcept_dt", "corp_name", "report_nm", "rcept_no", "url"]
 
 # OpenDART 검색어와 실제 등록 법인명이 다른 경우의 매핑. 여러 서비스가 공유합니다.
-CORPORATE_NAME_ALIASES = {"현대차": "현대자동차", "SK온": "에스케이온"}
+# DART는 포스코홀딩스를 'POSCO홀딩스'(005490)로 등록하고 있어 한글 표기로는 조회되지 않습니다.
+CORPORATE_NAME_ALIASES = {"현대차": "현대자동차", "SK온": "에스케이온", "포스코홀딩스": "POSCO홀딩스"}
 
 # /api/intelligence 응답 캐시 수명(초). 0이면 매 요청마다 외부 소스를 다시 조회합니다.
 INTELLIGENCE_CACHE_SECONDS = max(0, int(os.getenv("INTELLIGENCE_CACHE_SECONDS", "300")))
