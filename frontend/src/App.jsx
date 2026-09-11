@@ -662,13 +662,6 @@ function FinancialView({ companies, selectedCompany }) {
     const cells = [["영업CF", row.operating_cf], ["Capex", row.capex], ["FCF", row.fcf]];
     return <div className="balance-tooltip cashflow-tooltip"><strong>{label}</strong><table><tbody>{cells.map(([name, value]) => <tr key={name}><td>{name}</td><td>{formatCashAmount(value)}</td></tr>)}</tbody></table></div>;
   };
-  const metricSets = data
-    ? {
-        income: [["매출액", data.revenue_display], ["영업이익", data.operating_income_display], ["당기순이익", data.net_income_display], ["영업이익률", data.operating_margin_display], ["순이익률", data.net_margin_display], ["ROE", data.roe_display]],
-        balance: [balanceMetric("자산총계", data.assets_display, "assets"), balanceMetric("부채총계", data.liabilities_display, "liabilities", true), balanceMetric("자본총계", data.equity_display, "equity"), balanceMetric("부채비율", data.debt_ratio_display, "debt_ratio", true), balanceMetric("유동비율", data.current_ratio_display, "current_ratio"), balanceMetric("순차입금비율", data.net_debt_ratio_display, "net_debt_ratio", true)],
-        cashflow: [cashMetric("영업활동 현금흐름", "operating_cf"), cashMetric("투자활동 현금흐름", "investing_cf"), cashMetric("재무활동 현금흐름", "financing_cf"), cashMetric("현금 및 현금성자산", "cash"), cashMetric("잉여현금흐름(FCF)", "fcf")],
-      }
-    : { income: [], balance: [], cashflow: [] };
   const tabs = [
     { id: "income", label: "포괄손익계산서" },
     { id: "balance", label: "재무상태표" },
@@ -1629,7 +1622,7 @@ export default function App() {
         }}
       />
       <main className={collapsed ? "wide" : ""}>
-        <Header status={status} />
+        {view !== "scores" && <Header status={status} />}
         {view === "intel" ? (
           <>
             <DailyBriefing
